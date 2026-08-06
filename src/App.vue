@@ -5,7 +5,7 @@
       <h1>🏡 家园</h1>
       <div class="header-stats">
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-          <span>👥 {{ store.totalPopulation }}/{{ store.maxPopulation }}</span>
+          <span>人口：{{ store.totalPopulation }}/{{ store.maxPopulation }}</span>
           <span :class="{ warning: store.totalPercent > 80, danger: store.totalPercent >= 99 }">
             📦 {{ store.fmt(store.totalUsed) }}/{{ store.fmt(store.totalCapacity) }}
           </span>
@@ -23,6 +23,7 @@
         🔧 加工
         <span v-if="store.unlockedProcessingBuildings.length > 0" class="tag" style="background:var(--accent);color:#1a1a2e;margin-left:4px;">{{ store.unlockedProcessingBuildings.length }}</span>
       </button>
+      <button :class="{ active: tab === 'key' }" @click="tab = 'key'">🔑 关键</button>
       <button :class="{ active: tab === 'population' }" @click="tab = 'population'">👥 人口</button>
       <button :class="{ active: tab === 'warehouse' }" @click="tab = 'warehouse'">📦 仓库</button>
       <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">⚙️</button>
@@ -30,6 +31,7 @@
 
     <ProductionPanel v-if="tab === 'production'" />
     <ProcessingPanel v-if="tab === 'processing'" />
+    <KeyPanel v-if="tab === 'key'" />
     <PopulationPanel v-if="tab === 'population'" />
     <WarehousePanel v-if="tab === 'warehouse'" />
     <SettingsPanel v-if="tab === 'settings'" />
@@ -43,6 +45,7 @@ import { useGameStore } from './game/store.js'
 import ProductionPanel from './components/ProductionPanel.vue'
 import ProcessingPanel from './components/ProcessingPanel.vue'
 import PopulationPanel from './components/PopulationPanel.vue'
+import KeyPanel from './components/KeyPanel.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import OfflineModal from './components/OfflineModal.vue'

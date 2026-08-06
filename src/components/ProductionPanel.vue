@@ -22,10 +22,14 @@
 
       <!-- 人口槽位 -->
       <div style="display:flex;align-items:center;gap:6px;font-size:0.78em;margin:2px 0;">
-        <span v-for="i in b.slots" :key="i" style="cursor:pointer;" @click="toggleSlot(b.id, i)" :title="i <= b.assigned ? '点击撤出' : '点击派驻'">
-          {{ i <= b.assigned ? '👤' : '⚫' }}
-        </span>
-        <span style="color:var(--text-dim);margin-left:4px;">{{ b.assigned }}/{{ b.slots }}</span>
+        <button class="btn-sm" style="padding:0 6px;line-height:1.4;"
+          :disabled="b.assigned <= 0"
+          @click="store.unassignPop(b.id)">-</button>
+        <span style="font-weight:600;min-width:1.5em;text-align:center;">{{ b.assigned }}</span>
+        <button class="btn-sm" style="padding:0 6px;line-height:1.4;"
+          :disabled="b.assigned >= b.slots || store.unassignedPopulation <= 0"
+          @click="store.assignPop(b.id)">+</button>
+        <span style="color:var(--text-dim);margin-left:4px;">/ {{ b.slots }}</span>
         <span v-if="b.assigned === 0" style="color:var(--red);">（闲置中）</span>
       </div>
 
@@ -59,13 +63,4 @@
 <script setup>
 import { useGameStore } from '../game/store.js'
 const store = useGameStore()
-
-function toggleSlot(buildingId, slotNum) {
-  const assigned = store.getAssignedPop(buildingId)
-  if (slotNum <= assigned) {
-    store.unassignPop(buildingId)
-  } else {
-    store.assignPop(buildingId)
-  }
-}
 </script>

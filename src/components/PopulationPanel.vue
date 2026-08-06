@@ -2,7 +2,7 @@
   <div>
     <!-- 人口总览 -->
     <div class="panel">
-      <h2>👥 人口</h2>
+      <h2>人口</h2>
       <div style="text-align:center;margin:10px 0;">
         <div style="font-size:2em;font-weight:700;color:var(--accent);">
           {{ store.totalPopulation }} <span style="font-size:0.5em;color:var(--text-dim);">/ {{ store.maxPopulation }}</span>
@@ -29,35 +29,6 @@
         <div style="font-size:0.72em;color:var(--text-dim);text-align:center;">
           {{ growthHint }}
         </div>
-      </div>
-    </div>
-
-    <!-- 关键建筑 -->
-    <div class="panel" v-for="b in store.keyBuildings" :key="b.id">
-      <div class="resource-row">
-        <span class="resource-icon">{{ b.icon }}</span>
-        <span class="resource-name">
-          {{ b.name }}
-          <span class="milestone-badge" v-if="b.level >= 5">Lv{{ b.level }}</span>
-          <span v-else style="color:var(--text-dim);font-size:0.8em;"> Lv{{ b.level }}</span>
-          <span class="tag" style="margin-left:4px;">关键</span>
-        </span>
-        <span style="font-size:0.82em;color:var(--text-dim);">
-          +{{ b.maxPopBase + (b.level-1) * b.maxPopPerLevel }} 人口上限
-        </span>
-      </div>
-      <div v-if="b.nextMilestone" style="font-size:0.75em;color:var(--text-dim);margin-top:2px;">
-        🎯 Lv{{ b.nextMilestone.level }}: {{ b.nextMilestone.desc }}
-      </div>
-      <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:0.78em;color:var(--text-dim);">
-          升级消耗 {{ b.upgradeCost.amount }} {{ store.BASIC_RESOURCES[b.upgradeCost.resource]?.name }}
-        </span>
-        <button class="upgrade-btn"
-          :disabled="(store.resources[b.upgradeCost.resource] || 0) < b.upgradeCost.amount"
-          @click="store.upgradeBuilding(b.id)">
-          升级
-        </button>
       </div>
     </div>
 
