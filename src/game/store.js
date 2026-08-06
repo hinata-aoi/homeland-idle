@@ -23,6 +23,7 @@ export const useGameStore = defineStore('game', () => {
   const lastSaveTime = ref(Date.now())
 
   // 人口系统
+  const totalPopulation = ref(0)         // 独立状态：总人口数
   const populationAssigned = ref({})   // { buildingId: count }
   const growthProgress = ref(0)         // 0 → growthThreshold
 
@@ -51,7 +52,9 @@ export const useGameStore = defineStore('game', () => {
       ...KEY_BUILDINGS.map(b => b.id),
     ]
 
-    // 初始化人口分配：每个生产建筑自动分1人
+    // 初始化人口
+    totalPopulation.value = POPULATION_CONFIG.initialPopulation
+    // 每个生产建筑自动分1人
     for (const b of PRODUCTION_BUILDINGS) {
       populationAssigned.value[b.id] = 1
     }
@@ -62,15 +65,6 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // ==================== 人口计算 ====================
-
-  // 总人口
-  const totalPopulation = computed(() => {
-    let total = 0
-    for (const count of Object.values(populationAssigned.value)) {
-      total += count
-    }
-    return total
-  })
 
   // 人口上限（由聚集地建筑决定）
   const maxPopulation = computed(() => {
@@ -326,14 +320,8 @@ export const useGameStore = defineStore('game', () => {
     const slots = getBuildingSlots(buildingId)
     const current = getAssignedPop(buildingId)
     if (current >= slots) return false
-    // 从当前总人口中取（如果有未分配的话），否则从其他建筑借调
-    // 简化：只要总人口够，就能分配
-    const totalAssigned = getTotalAssigned()
-    const maxPop = maxPopulation.value
-    if (totalAssigned >= totalPopulation.value && totalPopulation.value >= maxPop) {
-      // 所有人口已分配且已达上限
-      return false
-    }
+    // 严格要求有空闲人口才能派驻
+    if (unassignedPopulation.value <= 0) return false
     populationAssigned.value[buildingId] = current + 1
     save()
     return true
@@ -433,9 +421,8 @@ export const useGameStore = defineStore('game', () => {
       // 检查是否触发人口增长
       while (growthProgress.value >= POPULATION_CONFIG.growthThreshold) {
         growthProgress.value -= POPULATION_CONFIG.growthThreshold
-        // 只有未达到上限时才增长
         if (totalPopulation.value < maxPopulation.value) {
-          // 新人口自动变为未分配
+          totalPopulation.value++
         }
       }
     } else {
@@ -469,25 +456,17 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function removeOnePopulation() {
-    // 先从空闲人口扣
-    // 如果全部人口都被分配，从分配最多人的建筑扣1人
-    const assigned = { ...populationAssigned.value }
-    let removed = false
-
-    // 找分配了最多人的建筑
+    // 优先扣未分配人口；全部分配则从最多人的建筑扣
+    totalPopulation.value = Math.max(0, totalPopulation.value - 1)
+    // 从分配最多人的建筑减员
     let maxBuilding = null
     let maxCount = 0
-    for (const [bid, count] of Object.entries(assigned)) {
-      if (count > maxCount) {
-        maxCount = count
-        maxBuilding = bid
-      }
+    for (const [bid, count] of Object.entries(populationAssigned.value)) {
+      if (count > maxCount) { maxCount = count; maxBuilding = bid }
     }
     if (maxBuilding && maxCount > 0) {
       populationAssigned.value[maxBuilding] = maxCount - 1
-      removed = true
     }
-    return removed
   }
 
   // ==================== 离线计算 ====================
@@ -566,6 +545,7 @@ export const useGameStore = defineStore('game', () => {
         buildingLevels: buildingLevels.value,
         warehouseLevel: warehouseLevel.value,
         discoveredBuildings: discoveredBuildings.value,
+        totalPopulation: totalPopulation.value,
         populationAssigned: populationAssigned.value,
         growthProgress: growthProgress.value,
         lastSaveTime: lastSaveTime.value,
@@ -585,6 +565,7 @@ export const useGameStore = defineStore('game', () => {
         buildingLevels.value = data.buildingLevels || {}
         warehouseLevel.value = data.warehouseLevel || 1
         discoveredBuildings.value = data.discoveredBuildings || []
+        totalPopulation.value = data.totalPopulation ?? POPULATION_CONFIG.initialPopulation
         populationAssigned.value = data.populationAssigned || {}
         growthProgress.value = data.growthProgress || 0
         lastSaveTime.value = data.lastSaveTime || Date.now()

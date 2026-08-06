@@ -27,7 +27,7 @@ export const ALL_RESOURCES = { ...BASIC_RESOURCES, ...REFINED_RESOURCES }
 // ========================
 
 export const POPULATION_CONFIG = {
-  initialPopulation: 5,       // 初始人口数
+  initialPopulation: 4,       // 初始人口数
   growthThreshold: 100,       // 增长进度条满值
   foodPerPersonPerSec: 0.05,  // 每人每秒食物消耗
   growthRate: 1.0,            // 基础增长速度（食物充裕时每秒+1进度）
@@ -60,7 +60,7 @@ export const BUILDINGS = [
     baseCost: 15,
     costMultiplier: 1.5,
     costResource: 'food',
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁酿酒坊', bonus: 0.25, unlockBuilding: 'brewery' },
       10: { desc: '产量翻倍', bonus: 1.0 },
@@ -79,7 +79,7 @@ export const BUILDINGS = [
     baseCost: 10,
     costMultiplier: 1.5,
     costResource: 'food',
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁锯木厂', bonus: 0.25, unlockBuilding: 'sawmill' },
       10: { desc: '产量翻倍', bonus: 1.0 },
@@ -98,7 +98,7 @@ export const BUILDINGS = [
     baseCost: 20,
     costMultiplier: 1.6,
     costResource: 'wood',
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁石匠坊', bonus: 0.25, unlockBuilding: 'mason' },
       10: { desc: '产量翻倍', bonus: 1.0 },
@@ -117,7 +117,7 @@ export const BUILDINGS = [
     baseCost: 25,
     costMultiplier: 1.7,
     costResource: 'wood',
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁制皮坊', bonus: 0.25, unlockBuilding: 'tannery' },
       10: { desc: '产量翻倍', bonus: 1.0 },
@@ -140,7 +140,7 @@ export const BUILDINGS = [
     costResource: 'wood',
     unlockBy: { building: 'forest', level: 5 },
     levelUpBonus: 0.05,
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '加工效率 +25%', bonus: 0.25 },
       10: { desc: '每次产出 +1', bonus: 0, extraOutput: 1 },
@@ -160,7 +160,7 @@ export const BUILDINGS = [
     costResource: 'wood',
     unlockBy: { building: 'quarry', level: 5 },
     levelUpBonus: 0.05,
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '加工效率 +25%', bonus: 0.25 },
       10: { desc: '每次产出 +1', bonus: 0, extraOutput: 1 },
@@ -180,7 +180,7 @@ export const BUILDINGS = [
     costResource: 'hide',
     unlockBy: { building: 'hunting', level: 5 },
     levelUpBonus: 0.05,
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '加工效率 +25%', bonus: 0.25 },
       10: { desc: '每次产出 +1', bonus: 0, extraOutput: 1 },
@@ -200,7 +200,7 @@ export const BUILDINGS = [
     costResource: 'food',
     unlockBy: { building: 'farm', level: 10 },
     levelUpBonus: 0.05,
-    populationSlots: { base: 1, perLevel: 5 },
+    populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '加工效率 +25%', bonus: 0.25 },
       10: { desc: '每次产出 +1', bonus: 0, extraOutput: 1 },
@@ -217,8 +217,8 @@ export const BUILDINGS = [
     baseCost: 50,
     costMultiplier: 2.0,
     costResource: 'wood',
-    maxPopBase: 10,       // 1级时的人口上限
-    maxPopPerLevel: 5,    // 每升1级 +5 上限
+    maxPopBase: 8,        // 1级时的人口上限
+    maxPopPerLevel: 3,    // 每升1级 +3 上限
     milestones: {
       5:  { desc: '人口增长加速 +50%', bonus: 0 },
       10: { desc: '人口上限额外 +10', bonus: 0 },
