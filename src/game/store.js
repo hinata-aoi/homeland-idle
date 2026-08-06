@@ -1,26 +1,32 @@
 // ============================================================
 // 《家园》游戏状态管理 (Pinia Store)
-// 统一建筑系统：生产建筑 + 加工建筑
+// 统一建筑系统 + 人口系统
 // ============================================================
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
-  BUILDINGS, PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS,
+  BUILDINGS, PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS, KEY_BUILDINGS,
   BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES, getBuilding,
-  WAREHOUSE_CONFIG, OFFLINE_CONFIG
+  POPULATION_CONFIG, WAREHOUSE_CONFIG, OFFLINE_CONFIG
 } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v3'
+const SAVE_KEY = 'homeland_save_v4'
 
 export const useGameStore = defineStore('game', () => {
   // ==================== 状态 ====================
 
-  const resources = ref({})           // 基础物资数量
-  const refined = ref({})             // 高级物资数量
-  const buildingLevels = ref({})      // 所有建筑的等级 { farm: 1, sawmill: 0, ... } — 加工建筑0=未解锁
-  const warehouseLevel = ref(1)       // 仓库等级
-  const discoveredBuildings = ref([]) // 已发现的建筑 ID（用于 UI 显示）
+  const resources = ref({})
+  const refined = ref({})
+  const buildingLevels = ref({})
+  const warehouseLevel = ref(1)
+  const discoveredBuildings = ref([])
   const lastSaveTime = ref(Date.now())
+
+  // 人口系统
+  const populationAssigned = ref({})   // { buildingId: count }
+  const growthProgress = ref(0)         // 0 → growthThreshold
+
+  // 离线弹窗
   const showOfflineModal = ref(false)
   const offlineEarnings = ref({})
   const offlineSeconds = ref(0)
@@ -35,13 +41,81 @@ export const useGameStore = defineStore('game', () => {
       refined.value[key] = def.starting
     }
     for (const b of BUILDINGS) {
-      // 生产建筑从1级开始，加工建筑0级=未解锁
-      buildingLevels.value[b.id] = b.type === 'production' ? 1 : 0
+      if (b.type === 'production') buildingLevels.value[b.id] = 1
+      else if (b.type === 'key') buildingLevels.value[b.id] = 1
+      else buildingLevels.value[b.id] = 0 // 加工建筑未解锁
     }
     warehouseLevel.value = 1
-    discoveredBuildings.value = PRODUCTION_BUILDINGS.map(b => b.id)
+    discoveredBuildings.value = [
+      ...PRODUCTION_BUILDINGS.map(b => b.id),
+      ...KEY_BUILDINGS.map(b => b.id),
+    ]
+
+    // 初始化人口分配：每个生产建筑自动分1人
+    for (const b of PRODUCTION_BUILDINGS) {
+      populationAssigned.value[b.id] = 1
+    }
+
+    growthProgress.value = 0
     lastSaveTime.value = Date.now()
     checkUnlocks()
+  }
+
+  // ==================== 人口计算 ====================
+
+  // 总人口
+  const totalPopulation = computed(() => {
+    let total = 0
+    for (const count of Object.values(populationAssigned.value)) {
+      total += count
+    }
+    return total
+  })
+
+  // 人口上限（由聚集地建筑决定）
+  const maxPopulation = computed(() => {
+    const lv = buildingLevels.value['settlement'] || 1
+    const b = getBuilding('settlement')
+    if (!b) return 10
+    // 里程碑10级额外+10
+    let bonus = 0
+    if (lv >= 10 && b.milestones[10]) bonus = 10
+    return b.maxPopBase + (lv - 1) * b.maxPopPerLevel + bonus
+  })
+
+  // 未分配人口
+  const unassignedPopulation = computed(() => {
+    return Math.max(0, totalPopulation.value - getTotalAssigned())
+  })
+
+  function getTotalAssigned() {
+    let total = 0
+    for (const count of Object.values(populationAssigned.value)) total += count
+    return total
+  }
+
+  // 增长进度百分比
+  const growthPercent = computed(() => {
+    return Math.min(100, (growthProgress.value / POPULATION_CONFIG.growthThreshold) * 100)
+  })
+
+  // 食物消耗速率（每秒）
+  const foodConsumption = computed(() => {
+    return totalPopulation.value * POPULATION_CONFIG.foodPerPersonPerSec
+  })
+
+  // 获取某建筑的槽位数
+  function getBuildingSlots(buildingId) {
+    const b = getBuilding(buildingId)
+    if (!b || !b.populationSlots) return 0
+    const level = buildingLevels.value[buildingId] || 0
+    if (level < 1) return 0
+    return b.populationSlots.base + Math.floor((level - 1) / b.populationSlots.perLevel)
+  }
+
+  // 获取某建筑已分配人口
+  function getAssignedPop(buildingId) {
+    return populationAssigned.value[buildingId] || 0
   }
 
   // ==================== 容量 ====================
@@ -76,62 +150,52 @@ export const useGameStore = defineStore('game', () => {
     return Math.min(100, (totalUsed.value / totalCapacity.value) * 100)
   })
 
-  // ==================== 建筑列表（计算属性）====================
+  // ==================== 建筑列表 ====================
 
-  // 生产建筑列表
   const productionBuildings = computed(() => {
     return PRODUCTION_BUILDINGS.map(b => {
       const level = buildingLevels.value[b.id] || 1
-      const rate = getProductionRate(b, level)
+      const assigned = getAssignedPop(b.id)
+      const slots = getBuildingSlots(b.id)
+      const rate = getProductionRate(b, level, assigned)
       const upgradeCost = getUpgradeCost(b, level)
       const nextMilestone = getNextMilestone(b, level)
       const cap = getResourceCap(b.produces)
       const amount = getResourceAmount(b.produces)
       const pct = cap > 0 ? (amount / cap) * 100 : 0
       return {
-        ...b,
-        level,
-        rate,
-        upgradeCost,
-        nextMilestone,
-        resourceAmount: amount,
-        resourceCap: cap,
-        resourcePct: pct,
+        ...b, level, assigned, slots, rate, upgradeCost, nextMilestone,
+        resourceAmount: amount, resourceCap: cap, resourcePct: pct,
+        isManned: assigned > 0,
       }
     })
   })
 
-  // 已解锁的加工建筑列表
   const unlockedProcessingBuildings = computed(() => {
     return PROCESSING_BUILDINGS
       .filter(b => (buildingLevels.value[b.id] || 0) > 0)
       .map(b => {
         const level = buildingLevels.value[b.id] || 1
+        const assigned = getAssignedPop(b.id)
+        const slots = getBuildingSlots(b.id)
         const upgradeCost = getUpgradeCost(b, level)
         const nextMilestone = getNextMilestone(b, level)
-        // 计算加工消耗（考虑等级加成）
-        const inputAmount = getEffectiveInput(b, level)
-        const outputAmount = getEffectiveOutput(b, level)
-        const haveInput = (resources.value[b.input.resource] || 0) >= inputAmount
+        const inputAmt = getEffectiveInput(b, level)
+        const outputAmt = getEffectiveOutput(b, level)
+        const haveInput = (resources.value[b.input.resource] || 0) >= inputAmt
         const outCap = getResourceCap(b.output.resource)
         const outAmt = getResourceAmount(b.output.resource)
-        const outSpace = outCap - outAmt >= outputAmount
         return {
-          ...b,
-          level,
-          upgradeCost,
-          nextMilestone,
-          effectiveInput: inputAmount,
-          effectiveOutput: outputAmount,
+          ...b, level, assigned, slots, upgradeCost, nextMilestone,
+          effectiveInput: inputAmt, effectiveOutput: outputAmt,
           inputAmount: resources.value[b.input.resource] || 0,
-          outputAmount: outAmt,
-          outputCap: outCap,
-          canProcess: haveInput && outSpace,
+          outputAmount: outAmt, outputCap: outCap,
+          canProcess: assigned > 0 && haveInput && (outAmt + outputAmt <= outCap),
+          isManned: assigned > 0,
         }
       })
   })
 
-  // 尚未解锁的加工建筑
   const lockedProcessingBuildings = computed(() => {
     return PROCESSING_BUILDINGS
       .filter(b => (buildingLevels.value[b.id] || 0) === 0)
@@ -143,52 +207,50 @@ export const useGameStore = defineStore('game', () => {
       }))
   })
 
+  const keyBuildings = computed(() => {
+    return KEY_BUILDINGS.map(b => {
+      const level = buildingLevels.value[b.id] || 1
+      const upgradeCost = getUpgradeCost(b, level)
+      const nextMilestone = getNextMilestone(b, level)
+      return { ...b, level, upgradeCost, nextMilestone }
+    })
+  })
+
   // ==================== 核心计算 ====================
 
-  // 生产建筑的当前产出速率
-  function getProductionRate(building, level) {
-    let rate = building.baseRate * (1 + (level - 1) * building.ratePerLevel)
+  function getProductionRate(building, level, assigned) {
+    if (assigned < 1) return 0
+    let rate = building.baseRate * assigned  // 每人口提供1倍基础产量
+    rate *= (1 + (level - 1) * building.ratePerLevel)
     for (const [mlv, ml] of Object.entries(building.milestones || {})) {
-      if (level >= parseInt(mlv)) {
-        rate *= (1 + (ml.bonus || 0))
-      }
+      if (level >= parseInt(mlv)) rate *= (1 + (ml.bonus || 0))
     }
     return rate
   }
 
-  // 加工建筑的实际输入需求（随等级降低）
   function getEffectiveInput(building, level) {
     let ratio = 1
-    // 每级减少 levelUpBonus 的需求
     ratio -= (level - 1) * (building.levelUpBonus || 0)
-    // 里程碑加成
     for (const [mlv, ml] of Object.entries(building.milestones || {})) {
-      if (level >= parseInt(mlv)) {
-        ratio -= (ml.bonus || 0)
-      }
+      if (level >= parseInt(mlv)) ratio -= (ml.bonus || 0)
     }
-    ratio = Math.max(0.3, ratio) // 最低30%
+    ratio = Math.max(0.3, ratio)
     return Math.max(1, Math.floor(building.input.amount * ratio))
   }
 
-  // 加工建筑的实际产出数量（随等级可能增加）
   function getEffectiveOutput(building, level) {
     let extra = 0
     for (const [mlv, ml] of Object.entries(building.milestones || {})) {
-      if (level >= parseInt(mlv)) {
-        extra += (ml.extraOutput || 0)
-      }
+      if (level >= parseInt(mlv)) extra += (ml.extraOutput || 0)
     }
     return building.output.amount + extra
   }
 
-  // 通用升级成本
   function getUpgradeCost(building, level) {
     const amount = Math.floor(building.baseCost * Math.pow(building.costMultiplier, level - 1))
     return { resource: building.costResource, amount }
   }
 
-  // 下一个里程碑
   function getNextMilestone(building, level) {
     if (!building.milestones) return null
     const milestones = Object.keys(building.milestones).map(Number).sort((a, b) => a - b)
@@ -198,7 +260,6 @@ export const useGameStore = defineStore('game', () => {
     return null
   }
 
-  // 仓库升级成本
   const warehouseUpgradeCost = computed(() => {
     const amount = Math.floor(
       WAREHOUSE_CONFIG.baseUpgradeCost.amount *
@@ -209,12 +270,11 @@ export const useGameStore = defineStore('game', () => {
 
   // ==================== 操作 ====================
 
-  // 升级任意建筑
   function upgradeBuilding(buildingId) {
     const building = getBuilding(buildingId)
     if (!building) return false
     const level = buildingLevels.value[buildingId] || 0
-    if (level < 0) return false // 未解锁的加工建筑
+    if (level < 0) return false
 
     const cost = getUpgradeCost(building, level)
     const costKey = cost.resource
@@ -228,7 +288,6 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
-  // 升级仓库
   function upgradeWarehouse() {
     const cost = warehouseUpgradeCost.value
     if ((resources.value[cost.resource] || 0) < cost.amount) return false
@@ -238,18 +297,19 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
-  // 加工（执行一次加工建筑的操作）
   function processBuilding(buildingId) {
     const building = getBuilding(buildingId)
     if (!building || building.type !== 'processing') return false
     const level = buildingLevels.value[buildingId] || 0
-    if (level < 1) return false // 未解锁
+    if (level < 1) return false
+
+    const assigned = getAssignedPop(buildingId)
+    if (assigned < 1) return false
 
     const inputNeeded = getEffectiveInput(building, level)
     const outputGain = getEffectiveOutput(building, level)
 
     if ((resources.value[building.input.resource] || 0) < inputNeeded) return false
-
     const outCap = getResourceCap(building.output.resource)
     const outAmt = getResourceAmount(building.output.resource)
     if (outAmt + outputGain > outCap) return false
@@ -260,7 +320,35 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
-  // 检查解锁（生产建筑里程碑解锁加工建筑）
+  // --- 人口分配 ---
+
+  function assignPop(buildingId) {
+    const slots = getBuildingSlots(buildingId)
+    const current = getAssignedPop(buildingId)
+    if (current >= slots) return false
+    // 从当前总人口中取（如果有未分配的话），否则从其他建筑借调
+    // 简化：只要总人口够，就能分配
+    const totalAssigned = getTotalAssigned()
+    const maxPop = maxPopulation.value
+    if (totalAssigned >= totalPopulation.value && totalPopulation.value >= maxPop) {
+      // 所有人口已分配且已达上限
+      return false
+    }
+    populationAssigned.value[buildingId] = current + 1
+    save()
+    return true
+  }
+
+  function unassignPop(buildingId) {
+    const current = getAssignedPop(buildingId)
+    if (current <= 0) return false
+    populationAssigned.value[buildingId] = current - 1
+    save()
+    return true
+  }
+
+  // --- 解锁 ---
+
   function checkUnlocks() {
     for (const b of PRODUCTION_BUILDINGS) {
       const level = buildingLevels.value[b.id] || 1
@@ -268,7 +356,7 @@ export const useGameStore = defineStore('game', () => {
         if (level >= parseInt(mlv) && ml.unlockBuilding) {
           const targetId = ml.unlockBuilding
           if ((buildingLevels.value[targetId] || 0) === 0) {
-            buildingLevels.value[targetId] = 1 // 解锁为1级
+            buildingLevels.value[targetId] = 1
             if (!discoveredBuildings.value.includes(targetId)) {
               discoveredBuildings.value.push(targetId)
             }
@@ -294,13 +382,11 @@ export const useGameStore = defineStore('game', () => {
     }
   }
 
-  // 向某种物资添加数量（受独立容量限制），返回实际添加量
   function addResource(key, amount) {
     const cap = getResourceCap(key)
     const current = getResourceAmount(key)
     const space = Math.max(0, cap - current)
     const actual = Math.min(amount, space)
-
     if (resources.value[key] !== undefined) {
       resources.value[key] = current + actual
     } else if (refined.value[key] !== undefined) {
@@ -310,21 +396,98 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function tick() {
-    // 只有生产建筑在 tick 中自动产出
+    // 1. 食物消耗
+    const consumed = foodConsumption.value
+    if (consumed > 0 && (resources.value.food || 0) > 0) {
+      resources.value.food = Math.max(0, (resources.value.food || 0) - consumed)
+    }
+
+    // 2. 生产建筑产出（有人口才工作）
     for (const b of PRODUCTION_BUILDINGS) {
       const level = buildingLevels.value[b.id] || 1
       if (level < 1) continue
-      const rate = getProductionRate(b, level)
+      const assigned = getAssignedPop(b.id)
+      if (assigned < 1) continue
+      const rate = getProductionRate(b, level, assigned)
       addResource(b.produces, rate)
 
-      // 里程碑15：自动产出高级物资（5%产能）
       if (level >= 15 && b.milestones[15]?.autoProduce) {
         addResource(b.milestones[15].autoProduce, rate * 0.05)
       }
     }
 
+    // 3. 人口增长/衰减
+    const foodAmount = resources.value.food || 0
+    const foodCap = getResourceCap('food')
+    const foodRatio = foodCap > 0 ? foodAmount / foodCap : 0
+
+    if (foodRatio >= POPULATION_CONFIG.starveThreshold) {
+      // 有足够食物 → 增长
+      let speed = POPULATION_CONFIG.growthRate
+      if (foodRatio >= POPULATION_CONFIG.feastThreshold) speed *= 2
+      // 食物丰裕度加成：食物越多越快
+      speed *= (0.5 + foodRatio)
+
+      growthProgress.value += speed
+
+      // 检查是否触发人口增长
+      while (growthProgress.value >= POPULATION_CONFIG.growthThreshold) {
+        growthProgress.value -= POPULATION_CONFIG.growthThreshold
+        // 只有未达到上限时才增长
+        if (totalPopulation.value < maxPopulation.value) {
+          // 新人口自动变为未分配
+        }
+      }
+    } else {
+      // 食物不足 → 衰减
+      let speed = POPULATION_CONFIG.declineRate
+      speed *= (1 - foodRatio / POPULATION_CONFIG.starveThreshold)
+
+      growthProgress.value -= speed
+
+      while (growthProgress.value < 0 && totalPopulation.value > 0) {
+        growthProgress.value += POPULATION_CONFIG.growthThreshold
+        // 先从未分配中扣，没有未分配就从任意建筑中扣
+        removeOnePopulation()
+      }
+    }
+
+    // 限制进度条范围
+    growthProgress.value = Math.max(0, Math.min(
+      growthProgress.value,
+      POPULATION_CONFIG.growthThreshold * 2
+    ))
+
+    // 防止人口降为负数
+    if (totalPopulation.value <= 0) {
+      growthProgress.value = Math.max(0, growthProgress.value)
+      // 至少保留初始人口
+    }
+
     if (Math.floor(Date.now() / 1000) % 30 === 0) save()
     lastSaveTime.value = Date.now()
+  }
+
+  function removeOnePopulation() {
+    // 先从空闲人口扣
+    // 如果全部人口都被分配，从分配最多人的建筑扣1人
+    const assigned = { ...populationAssigned.value }
+    let removed = false
+
+    // 找分配了最多人的建筑
+    let maxBuilding = null
+    let maxCount = 0
+    for (const [bid, count] of Object.entries(assigned)) {
+      if (count > maxCount) {
+        maxCount = count
+        maxBuilding = bid
+      }
+    }
+    if (maxBuilding && maxCount > 0) {
+      populationAssigned.value[maxBuilding] = maxCount - 1
+      removed = true
+    }
+    return removed
   }
 
   // ==================== 离线计算 ====================
@@ -337,10 +500,19 @@ export const useGameStore = defineStore('game', () => {
     const cappedElapsed = Math.min(elapsed, OFFLINE_CONFIG.maxOfflineHours * 3600)
     const earnings = {}
 
+    // 离线期间食物消耗（简化：消耗一半速度，不让玩家上线发现人都死光了）
+    const offlineConsumption = foodConsumption.value * cappedElapsed * 0.5
+    if (offlineConsumption > 0) {
+      resources.value.food = Math.max(0, (resources.value.food || 0) - offlineConsumption)
+    }
+
+    // 离线生产
     for (const b of PRODUCTION_BUILDINGS) {
       const level = buildingLevels.value[b.id] || 1
       if (level < 1) continue
-      const rate = getProductionRate(b, level) * OFFLINE_CONFIG.offlineRateMultiplier
+      const assigned = getAssignedPop(b.id)
+      if (assigned < 1) continue
+      const rate = getProductionRate(b, level, assigned) * OFFLINE_CONFIG.offlineRateMultiplier
       const produced = rate * cappedElapsed
 
       const actual = addResource(b.produces, produced)
@@ -353,6 +525,19 @@ export const useGameStore = defineStore('game', () => {
         const autoActual = addResource(autoRes, rate * 0.05 * cappedElapsed)
         if (autoActual > 0.01) {
           earnings['auto_' + autoRes] = (earnings['auto_' + autoRes] || 0) + autoActual
+        }
+      }
+    }
+
+    // 离线人口增长（仅当食物为正时缓慢增长，不衰减）
+    if ((resources.value.food || 0) > 0 && totalPopulation.value < maxPopulation.value) {
+      const foodRatio = (resources.value.food || 0) / (getResourceCap('food') || 1)
+      if (foodRatio >= POPULATION_CONFIG.starveThreshold) {
+        const offlineGrowth = POPULATION_CONFIG.growthRate * 0.3 * cappedElapsed
+        growthProgress.value += offlineGrowth
+        while (growthProgress.value >= POPULATION_CONFIG.growthThreshold &&
+               totalPopulation.value < maxPopulation.value) {
+          growthProgress.value -= POPULATION_CONFIG.growthThreshold
         }
       }
     }
@@ -381,8 +566,10 @@ export const useGameStore = defineStore('game', () => {
         buildingLevels: buildingLevels.value,
         warehouseLevel: warehouseLevel.value,
         discoveredBuildings: discoveredBuildings.value,
+        populationAssigned: populationAssigned.value,
+        growthProgress: growthProgress.value,
         lastSaveTime: lastSaveTime.value,
-        version: 3,
+        version: 4,
       }))
     } catch (e) { /* ignore */ }
   }
@@ -392,12 +579,14 @@ export const useGameStore = defineStore('game', () => {
       const raw = localStorage.getItem(SAVE_KEY)
       if (!raw) return false
       const data = JSON.parse(raw)
-      if (data.version === 3) {
+      if (data.version === 4) {
         resources.value = data.resources || {}
         refined.value = data.refined || {}
         buildingLevels.value = data.buildingLevels || {}
         warehouseLevel.value = data.warehouseLevel || 1
         discoveredBuildings.value = data.discoveredBuildings || []
+        populationAssigned.value = data.populationAssigned || {}
+        growthProgress.value = data.growthProgress || 0
         lastSaveTime.value = data.lastSaveTime || Date.now()
         calculateOffline()
         checkUnlocks()
@@ -416,27 +605,21 @@ export const useGameStore = defineStore('game', () => {
     startTick()
   }
 
-  // 调试：直接设置资源数量
+  // ==================== 调试 ====================
+
   function setResourceAmount(key, amount) {
     const cap = getResourceCap(key)
     const clamped = Math.max(0, Math.min(amount, cap))
-    if (resources.value[key] !== undefined) {
-      resources.value[key] = clamped
-    } else if (refined.value[key] !== undefined) {
-      refined.value[key] = clamped
-    }
+    if (resources.value[key] !== undefined) resources.value[key] = clamped
+    else if (refined.value[key] !== undefined) refined.value[key] = clamped
     save()
   }
 
-  // 调试：填满所有资源到上限
   function fillAllResources() {
     for (const key of Object.keys(ALL_RESOURCES)) {
       const cap = getResourceCap(key)
-      if (resources.value[key] !== undefined) {
-        resources.value[key] = cap
-      } else if (refined.value[key] !== undefined) {
-        refined.value[key] = cap
-      }
+      if (resources.value[key] !== undefined) resources.value[key] = cap
+      else if (refined.value[key] !== undefined) refined.value[key] = cap
     }
     save()
   }
@@ -461,19 +644,27 @@ export const useGameStore = defineStore('game', () => {
     // 状态
     resources, refined, buildingLevels, warehouseLevel,
     discoveredBuildings, lastSaveTime,
+    populationAssigned, growthProgress,
     showOfflineModal, offlineEarnings, offlineSeconds,
-    // 计算
+    // 人口计算
+    totalPopulation, maxPopulation, unassignedPopulation,
+    growthPercent, foodConsumption,
+    getBuildingSlots, getAssignedPop,
+    // 容量
     totalCapacity, totalUsed, totalPercent,
     warehouseUpgradeCost,
+    // 建筑列表
     productionBuildings, unlockedProcessingBuildings, lockedProcessingBuildings,
+    keyBuildings,
     getResourceCap, getResourceAmount,
     // 操作
     initNewGame, upgradeBuilding, upgradeWarehouse, processBuilding,
+    assignPop, unassignPop,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,
-    save, load, resetGame, setResourceAmount, fillAllResources,
+    save, load, resetGame,
+    setResourceAmount, fillAllResources,
     // 工具
     fmt, fmtTime,
-    // 常量引用
     BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES,
   }
 })
