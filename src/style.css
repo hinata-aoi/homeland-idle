@@ -1,0 +1,246 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --panel: #16213e;
+  --accent: #e2a03f;
+  --text: #e0e0e0;
+  --text-dim: #8888aa;
+  --green: #4caf84;
+  --red: #e05555;
+  --blue: #5b9bd5;
+  --border: #2a2a4a;
+  --radius: 8px;
+}
+
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  min-height: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.15s;
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+}
+
+.panel h2 {
+  font-size: 1em;
+  color: var(--accent);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.resource-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.resource-row + .resource-row {
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.resource-icon {
+  font-size: 1.2em;
+  width: 28px;
+  text-align: center;
+}
+
+.resource-name {
+  flex: 1;
+  font-size: 0.95em;
+}
+
+.resource-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  font-family: "SF Mono", "Consolas", "Microsoft YaHei", monospace;
+  min-width: 60px;
+  text-align: right;
+}
+
+.resource-rate {
+  font-size: 0.78em;
+  color: var(--text-dim);
+  min-width: 50px;
+  text-align: right;
+}
+
+.upgrade-btn {
+  background: var(--accent);
+  color: #1a1a2e;
+  padding: 4px 12px;
+  font-size: 0.82em;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.upgrade-btn:disabled {
+  background: #555;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.upgrade-btn:disabled:active {
+  transform: none;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  border-radius: 4px;
+}
+
+.btn-green {
+  background: var(--green);
+  color: #fff;
+}
+
+.btn-red {
+  background: var(--red);
+  color: #fff;
+}
+
+.btn-blue {
+  background: var(--blue);
+  color: #fff;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+}
+
+.modal h2 {
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.modal p {
+  margin-bottom: 8px;
+  color: var(--text-dim);
+}
+
+.modal .big-number {
+  font-size: 2em;
+  font-weight: 700;
+  color: var(--accent);
+  margin: 12px 0;
+}
+
+.progress-bar {
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.milestone-badge {
+  display: inline-block;
+  background: var(--accent);
+  color: #1a1a2e;
+  font-size: 0.7em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.72em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+  background: var(--border);
+  color: var(--text-dim);
+}
+
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.tab-bar button {
+  flex: 1;
+  background: var(--panel);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 8px;
+  font-size: 0.85em;
+  border-radius: var(--radius);
+}
+
+.tab-bar button.active {
+  background: var(--accent);
+  color: #1a1a2e;
+  border-color: var(--accent);
+}
+
+@media (max-width: 400px) {
+  #app { padding: 8px; }
+  .panel { padding: 10px; }
+  .resource-name { font-size: 0.88em; }
+}
