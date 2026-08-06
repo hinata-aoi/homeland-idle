@@ -25,6 +25,7 @@
       </button>
       <button :class="{ active: tab === 'key' }" @click="tab = 'key'">🔑 关键</button>
       <button :class="{ active: tab === 'population' }" @click="tab = 'population'">👥 人口</button>
+      <button :class="{ active: tab === 'policy' }" @click="tab = 'policy'">📜 政策</button>
       <button :class="{ active: tab === 'warehouse' }" @click="tab = 'warehouse'">📦 仓库</button>
       <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">⚙️</button>
     </nav>
@@ -33,6 +34,7 @@
     <ProcessingPanel v-if="tab === 'processing'" />
     <KeyPanel v-if="tab === 'key'" />
     <PopulationPanel v-if="tab === 'population'" />
+    <PolicyPanel v-if="tab === 'policy'" />
     <WarehousePanel v-if="tab === 'warehouse'" />
     <SettingsPanel v-if="tab === 'settings'" />
     <OfflineModal />
@@ -46,6 +48,7 @@ import ProductionPanel from './components/ProductionPanel.vue'
 import ProcessingPanel from './components/ProcessingPanel.vue'
 import PopulationPanel from './components/PopulationPanel.vue'
 import KeyPanel from './components/KeyPanel.vue'
+import PolicyPanel from './components/PolicyPanel.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import OfflineModal from './components/OfflineModal.vue'

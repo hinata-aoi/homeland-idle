@@ -10,7 +10,7 @@
         <div style="font-size:0.85em;color:var(--text-dim);margin-top:4px;">
           🧑 空闲: {{ store.unassignedPopulation }}
           &nbsp;·&nbsp;
-          🍞 每秒消耗 {{ store.fmt(store.foodConsumption) }} 食物
+          🍞 每秒消耗 {{ store.fmt(store.foodConsumption) }} 食物值
         </div>
       </div>
 
@@ -58,24 +58,18 @@ import { BUILDINGS } from '../game/config.js'
 const store = useGameStore()
 
 const growthColor = computed(() => {
-  const food = store.resources.food || 0
-  const cap = store.getResourceCap('food')
-  if (cap === 0) return 'var(--red)'
-  if (food / cap < 0.1) return 'var(--red)'
-  if (food / cap < 0.3) return 'var(--accent)'
+  const status = store.foodValueStatus
+  if (status === 'starve') return 'var(--red)'
+  if (status === 'normal') return 'var(--accent)'
   return 'var(--green)'
 })
 
 const growthHint = computed(() => {
-  const food = store.resources.food || 0
-  const cap = store.getResourceCap('food')
-  if (cap === 0) return '—'
-  const ratio = food / cap
-  if (ratio < 0.1) return '⚠️ 食物严重不足，人口正在减少'
-  if (ratio < 0.3) return '食物紧张，增长缓慢'
-  if (ratio < 0.5) return '食物稳定，人口正在增长'
+  const status = store.foodValueStatus
   if (store.totalPopulation >= store.maxPopulation) return '已达人口上限，升级聚集地以容纳更多'
-  return '食物充裕，人口快速增长'
+  if (status === 'starve') return '⚠️ 食物值耗尽，人口正在减少'
+  if (status === 'normal') return '食物值偏低，增长缓慢'
+  return '食物值充裕，人口快速增长'
 })
 
 const assignments = computed(() => {

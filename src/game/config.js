@@ -7,7 +7,7 @@
 // ========================
 
 export const BASIC_RESOURCES = {
-  food:  { name: '食物', icon: '🍞', starting: 50,  baseCapacity: 1000 },
+  wheat:  { name: '小麦', icon: '🌾', starting: 50,  baseCapacity: 1000 },
   wood:  { name: '木材', icon: '🪵', starting: 30,  baseCapacity: 800 },
   stone: { name: '石头', icon: '🪨', starting: 10,  baseCapacity: 600 },
   hide:  { name: '兽皮', icon: '🦴', starting: 5,   baseCapacity: 400 },
@@ -29,11 +29,29 @@ export const ALL_RESOURCES = { ...BASIC_RESOURCES, ...REFINED_RESOURCES }
 export const POPULATION_CONFIG = {
   initialPopulation: 4,       // 初始人口数
   growthThreshold: 100,       // 增长进度条满值
-  foodPerPersonPerSec: 0.05,  // 每人每秒食物消耗
   growthRate: 1.0,            // 基础增长速度（食物充裕时每秒+1进度）
   declineRate: 1.0,           // 基础衰减速度（食物不足时每秒-1进度）
-  starveThreshold: 0.10,      // 食物低于容量的此比例时开始倒扣进度
-  feastThreshold: 0.50,       // 食物高于容量的此比例时增长加速2x
+}
+
+// ========================
+// 需求系统配置（食物值）
+// ========================
+
+export const DEMAND_CONFIG = {
+  foodValuePerPersonPerSec: 0.05,  // 每人每秒消耗食物值
+  starveThreshold: 0,              // 食物值<=此值触发人口衰减
+  feastThreshold: 10,              // 食物值>=此值增长加速2x
+}
+
+// ========================
+// 政策系统配置
+// ========================
+
+export const POLICY_CONFIG = {
+  conversions: [
+    { input: 'wheat', output: 'foodValue', ratio: 5, maxRate: 50, name: '小麦转化' },
+  ],
+  defaultRate: 0,  // 默认不转化
 }
 
 // ========================
@@ -53,13 +71,13 @@ export const BUILDINGS = [
     type: 'production',
     name: '农田',
     icon: '🌾',
-    description: '自动种植和收获农作物',
-    produces: 'food',
+    description: '自动种植和收获小麦',
+    produces: 'wheat',
     baseRate: 1.0,
     ratePerLevel: 0.10,
     baseCost: 15,
     costMultiplier: 1.5,
-    costResource: 'food',
+    costResource: 'wood',
     populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁酿酒坊', bonus: 0.25, unlockBuilding: 'brewery' },
@@ -78,7 +96,7 @@ export const BUILDINGS = [
     ratePerLevel: 0.10,
     baseCost: 10,
     costMultiplier: 1.5,
-    costResource: 'food',
+    costResource: 'wood',
     populationSlots: { base: 3, perLevel: 1 },
     milestones: {
       5:  { desc: '解锁锯木厂', bonus: 0.25, unlockBuilding: 'sawmill' },
@@ -191,13 +209,13 @@ export const BUILDINGS = [
     type: 'processing',
     name: '酿酒坊',
     icon: '🍺',
-    description: '将食物酿造成酒',
-    input: { resource: 'food', amount: 5 },
+    description: '将小麦酿造成酒',
+    input: { resource: 'wheat', amount: 5 },
     output: { resource: 'wine', amount: 1 },
     processTime: 5,
     baseCost: 40,
     costMultiplier: 1.8,
-    costResource: 'food',
+    costResource: 'wood',
     unlockBy: { building: 'farm', level: 10 },
     levelUpBonus: 0.05,
     populationSlots: { base: 3, perLevel: 1 },

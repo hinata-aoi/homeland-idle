@@ -7,7 +7,8 @@ import { ref, computed } from 'vue'
 import {
   BUILDINGS, PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS, KEY_BUILDINGS,
   BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES, getBuilding,
-  POPULATION_CONFIG, WAREHOUSE_CONFIG, OFFLINE_CONFIG
+  POPULATION_CONFIG, DEMAND_CONFIG, POLICY_CONFIG,
+  WAREHOUSE_CONFIG, OFFLINE_CONFIG
 } from './config.js'
 
 const SAVE_KEY = 'homeland_save_v4'
@@ -26,6 +27,12 @@ export const useGameStore = defineStore('game', () => {
   const totalPopulation = ref(0)         // 独立状态：总人口数
   const populationAssigned = ref({})   // { buildingId: count }
   const growthProgress = ref(0)         // 0 → growthThreshold
+
+  // 需求系统（食物值）
+  const foodValue = ref(0)              // 独立于仓库的食物值
+
+  // 政策系统
+  const policyRates = ref({})           // { resourceId: ratePerSec }
 
   // 离线弹窗
   const showOfflineModal = ref(false)
@@ -60,6 +67,11 @@ export const useGameStore = defineStore('game', () => {
     }
 
     growthProgress.value = 0
+    foodValue.value = 0
+    policyRates.value = {}
+    for (const c of POLICY_CONFIG.conversions) {
+      policyRates.value[c.input] = POLICY_CONFIG.defaultRate
+    }
     lastSaveTime.value = Date.now()
     checkUnlocks()
   }
@@ -93,9 +105,16 @@ export const useGameStore = defineStore('game', () => {
     return Math.min(100, (growthProgress.value / POPULATION_CONFIG.growthThreshold) * 100)
   })
 
-  // 食物消耗速率（每秒）
+  // 食物值消耗速率（每秒）
   const foodConsumption = computed(() => {
-    return totalPopulation.value * POPULATION_CONFIG.foodPerPersonPerSec
+    return totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec
+  })
+
+  // 食物值状态
+  const foodValueStatus = computed(() => {
+    if (foodValue.value >= DEMAND_CONFIG.feastThreshold) return 'feast'
+    if (foodValue.value > DEMAND_CONFIG.starveThreshold) return 'normal'
+    return 'starve'
   })
 
   // 获取某建筑的槽位数
@@ -335,6 +354,17 @@ export const useGameStore = defineStore('game', () => {
     return true
   }
 
+  // --- 政策 ---
+
+  function setPolicyRate(resourceId, rate) {
+    const conv = POLICY_CONFIG.conversions.find(c => c.input === resourceId)
+    if (!conv) return false
+    const clamped = Math.max(0, Math.min(rate, conv.maxRate))
+    policyRates.value[resourceId] = clamped
+    save()
+    return true
+  }
+
   // --- 解锁 ---
 
   function checkUnlocks() {
@@ -384,13 +414,24 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function tick() {
-    // 1. 食物消耗
-    const consumed = foodConsumption.value
-    if (consumed > 0 && (resources.value.food || 0) > 0) {
-      resources.value.food = Math.max(0, (resources.value.food || 0) - consumed)
+    // 1. 政策转化：消耗资源 → 产生食物值
+    for (const c of POLICY_CONFIG.conversions) {
+      const rate = policyRates.value[c.input] || 0
+      if (rate > 0) {
+        const available = resources.value[c.input] || 0
+        const actual = Math.min(rate, available)
+        if (actual > 0) {
+          resources.value[c.input] = available - actual
+          foodValue.value += actual / c.ratio
+        }
+      }
     }
 
-    // 2. 生产建筑产出（有人口才工作）
+    // 2. 食物值消耗
+    const consumed = foodConsumption.value
+    foodValue.value = Math.max(0, foodValue.value - consumed)
+
+    // 3. 生产建筑产出（有人口才工作）
     for (const b of PRODUCTION_BUILDINGS) {
       const level = buildingLevels.value[b.id] || 1
       if (level < 1) continue
@@ -404,21 +445,17 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    // 3. 人口增长/衰减
-    const foodAmount = resources.value.food || 0
-    const foodCap = getResourceCap('food')
-    const foodRatio = foodCap > 0 ? foodAmount / foodCap : 0
-
-    if (foodRatio >= POPULATION_CONFIG.starveThreshold) {
-      // 有足够食物 → 增长
+    // 4. 人口增长/衰减（基于食物值）
+    if (foodValue.value > DEMAND_CONFIG.starveThreshold) {
+      // 有食物值 → 增长
       let speed = POPULATION_CONFIG.growthRate
-      if (foodRatio >= POPULATION_CONFIG.feastThreshold) speed *= 2
-      // 食物丰裕度加成：食物越多越快
-      speed *= (0.5 + foodRatio)
+      if (foodValue.value >= DEMAND_CONFIG.feastThreshold) speed *= 2
+      // 食物值越多越快（cap at 2x from food value abundance）
+      const abundanceBonus = Math.min(2, 0.5 + foodValue.value / Math.max(1, DEMAND_CONFIG.feastThreshold))
+      speed *= abundanceBonus
 
       growthProgress.value += speed
 
-      // 检查是否触发人口增长
       while (growthProgress.value >= POPULATION_CONFIG.growthThreshold) {
         growthProgress.value -= POPULATION_CONFIG.growthThreshold
         if (totalPopulation.value < maxPopulation.value) {
@@ -426,15 +463,19 @@ export const useGameStore = defineStore('game', () => {
         }
       }
     } else {
-      // 食物不足 → 衰减
+      // 食物值不足 → 衰减
       let speed = POPULATION_CONFIG.declineRate
-      speed *= (1 - foodRatio / POPULATION_CONFIG.starveThreshold)
+      // 食物值越低衰减越快（0时最快）
+      if (foodValue.value <= 0) {
+        speed *= 1.5
+      } else {
+        speed *= (1 - foodValue.value / DEMAND_CONFIG.starveThreshold)
+      }
 
       growthProgress.value -= speed
 
       while (growthProgress.value < 0 && totalPopulation.value > 0) {
         growthProgress.value += POPULATION_CONFIG.growthThreshold
-        // 先从未分配中扣，没有未分配就从任意建筑中扣
         removeOnePopulation()
       }
     }
@@ -448,7 +489,6 @@ export const useGameStore = defineStore('game', () => {
     // 防止人口降为负数
     if (totalPopulation.value <= 0) {
       growthProgress.value = Math.max(0, growthProgress.value)
-      // 至少保留初始人口
     }
 
     if (Math.floor(Date.now() / 1000) % 30 === 0) save()
@@ -479,11 +519,22 @@ export const useGameStore = defineStore('game', () => {
     const cappedElapsed = Math.min(elapsed, OFFLINE_CONFIG.maxOfflineHours * 3600)
     const earnings = {}
 
-    // 离线期间食物消耗（简化：消耗一半速度，不让玩家上线发现人都死光了）
-    const offlineConsumption = foodConsumption.value * cappedElapsed * 0.5
-    if (offlineConsumption > 0) {
-      resources.value.food = Math.max(0, (resources.value.food || 0) - offlineConsumption)
+    // 离线政策转化
+    for (const c of POLICY_CONFIG.conversions) {
+      const rate = policyRates.value[c.input] || 0
+      if (rate > 0) {
+        const available = resources.value[c.input] || 0
+        const totalConvert = Math.min(rate * cappedElapsed, available)
+        if (totalConvert > 0) {
+          resources.value[c.input] = available - totalConvert
+          foodValue.value += totalConvert / c.ratio
+        }
+      }
     }
+
+    // 离线食物值消耗（50%速率）
+    const offlineConsumption = foodConsumption.value * cappedElapsed * 0.5
+    foodValue.value = Math.max(0, foodValue.value - offlineConsumption)
 
     // 离线生产
     for (const b of PRODUCTION_BUILDINGS) {
@@ -508,16 +559,14 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    // 离线人口增长（仅当食物为正时缓慢增长，不衰减）
-    if ((resources.value.food || 0) > 0 && totalPopulation.value < maxPopulation.value) {
-      const foodRatio = (resources.value.food || 0) / (getResourceCap('food') || 1)
-      if (foodRatio >= POPULATION_CONFIG.starveThreshold) {
-        const offlineGrowth = POPULATION_CONFIG.growthRate * 0.3 * cappedElapsed
-        growthProgress.value += offlineGrowth
-        while (growthProgress.value >= POPULATION_CONFIG.growthThreshold &&
-               totalPopulation.value < maxPopulation.value) {
-          growthProgress.value -= POPULATION_CONFIG.growthThreshold
-        }
+    // 离线人口增长（仅当食物值>0时缓慢增长，不衰减）
+    if (foodValue.value > 0 && totalPopulation.value < maxPopulation.value) {
+      const offlineGrowth = POPULATION_CONFIG.growthRate * 0.3 * cappedElapsed
+      growthProgress.value += offlineGrowth
+      while (growthProgress.value >= POPULATION_CONFIG.growthThreshold &&
+             totalPopulation.value < maxPopulation.value) {
+        growthProgress.value -= POPULATION_CONFIG.growthThreshold
+        totalPopulation.value++
       }
     }
 
@@ -548,6 +597,8 @@ export const useGameStore = defineStore('game', () => {
         totalPopulation: totalPopulation.value,
         populationAssigned: populationAssigned.value,
         growthProgress: growthProgress.value,
+        foodValue: foodValue.value,
+        policyRates: policyRates.value,
         lastSaveTime: lastSaveTime.value,
         version: 4,
       }))
@@ -568,6 +619,14 @@ export const useGameStore = defineStore('game', () => {
         totalPopulation.value = data.totalPopulation ?? POPULATION_CONFIG.initialPopulation
         populationAssigned.value = data.populationAssigned || {}
         growthProgress.value = data.growthProgress || 0
+        foodValue.value = data.foodValue ?? 0
+        policyRates.value = data.policyRates || {}
+        // 确保所有转化项都有默认值
+        for (const c of POLICY_CONFIG.conversions) {
+          if (policyRates.value[c.input] === undefined) {
+            policyRates.value[c.input] = POLICY_CONFIG.defaultRate
+          }
+        }
         lastSaveTime.value = data.lastSaveTime || Date.now()
         calculateOffline()
         checkUnlocks()
@@ -629,7 +688,7 @@ export const useGameStore = defineStore('game', () => {
     showOfflineModal, offlineEarnings, offlineSeconds,
     // 人口计算
     totalPopulation, maxPopulation, unassignedPopulation,
-    growthPercent, foodConsumption,
+    growthPercent, foodConsumption, foodValue, foodValueStatus,
     getBuildingSlots, getAssignedPop,
     // 容量
     totalCapacity, totalUsed, totalPercent,
@@ -640,7 +699,8 @@ export const useGameStore = defineStore('game', () => {
     getResourceCap, getResourceAmount,
     // 操作
     initNewGame, upgradeBuilding, upgradeWarehouse, processBuilding,
-    assignPop, unassignPop,
+    assignPop, unassignPop, setPolicyRate,
+    POLICY_CONFIG,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,
     save, load, resetGame,
     setResourceAmount, fillAllResources,
