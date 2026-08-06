@@ -710,7 +710,7 @@ export const useGameStore = defineStore('game', () => {
     // 操作
     initNewGame, upgradeBuilding, upgradeWarehouse, processBuilding,
     assignPop, unassignPop, setPolicyRate,
-    POLICY_CONFIG,
+    policyRates, POLICY_CONFIG,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,
     save, load, resetGame,
     setResourceAmount, fillAllResources,
