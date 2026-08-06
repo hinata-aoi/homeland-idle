@@ -409,6 +409,11 @@ export const useGameStore = defineStore('game', () => {
       resources.value[key] = current + actual
     } else if (refined.value[key] !== undefined) {
       refined.value[key] = current + actual
+    } else if (BASIC_RESOURCES[key]) {
+      // 基本资源尚未初始化（如旧存档迁移），初始化后写入
+      resources.value[key] = current + actual
+    } else if (REFINED_RESOURCES[key]) {
+      refined.value[key] = current + actual
     }
     return actual
   }
@@ -613,6 +618,11 @@ export const useGameStore = defineStore('game', () => {
       if (data.version === 4) {
         resources.value = data.resources || {}
         refined.value = data.refined || {}
+        // 迁移：旧存档的 food → wheat
+        if (resources.value.food !== undefined && resources.value.wheat === undefined) {
+          resources.value.wheat = resources.value.food
+          delete resources.value.food
+        }
         buildingLevels.value = data.buildingLevels || {}
         warehouseLevel.value = data.warehouseLevel || 1
         discoveredBuildings.value = data.discoveredBuildings || []
