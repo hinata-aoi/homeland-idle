@@ -14,11 +14,11 @@
         </div>
       </div>
 
-      <!-- 增长进度条 -->
+      <!-- 食物槽进度条 -->
       <div style="margin-top:8px;">
         <div style="display:flex;justify-content:space-between;font-size:0.78em;color:var(--text-dim);">
-          <span>📈 人口增长</span>
-          <span>{{ store.fmt(store.growthProgress) }} / {{ store.fmt(100) }}</span>
+          <span>🍞 食物槽</span>
+          <span>{{ store.fmt(store.foodValue) }} / {{ store.fmt(store.getGrowthNeeded(store.totalPopulation)) }}</span>
         </div>
         <div class="progress-bar" style="width:100%;margin:4px 0;">
           <div
@@ -59,17 +59,18 @@ const store = useGameStore()
 
 const growthColor = computed(() => {
   const status = store.foodValueStatus
-  if (status === 'starve') return 'var(--red)'
-  if (status === 'normal') return 'var(--accent)'
+  if (status === 'deficit') return 'var(--red)'
+  if (status === 'balanced') return 'var(--accent)'
   return 'var(--green)'
 })
 
 const growthHint = computed(() => {
   const status = store.foodValueStatus
   if (store.totalPopulation >= store.maxPopulation) return '已达人口上限，升级聚集地以容纳更多'
-  if (status === 'starve') return '⚠️ 食物值耗尽，人口正在减少'
-  if (status === 'normal') return '食物值偏低，增长缓慢'
-  return '食物值充裕，人口快速增长'
+  const surplus = store.foodValueSurplus
+  if (status === 'deficit') return `⚠️ 食物短缺 ${store.fmt(Math.abs(surplus))}/s，人口正在减少`
+  if (status === 'balanced') return '食物供需平衡，人口稳定'
+  return `食物盈余 +${store.fmt(surplus)}/s，人口正在增长`
 })
 
 const assignments = computed(() => {

@@ -80,15 +80,7 @@ function setRate(input, event) {
   store.setPolicyRate(input, parseInt(event.target.value))
 }
 
-const netChange = computed(() => {
-  let totalGain = 0
-  for (const c of store.POLICY_CONFIG.conversions) {
-    const rate = store.policyRates?.[c.input] || 0
-    const available = store.resources[c.input] || 0
-    totalGain += Math.min(rate, available) / c.ratio
-  }
-  return totalGain - store.foodConsumption
-})
+const netChange = computed(() => store.foodValueSurplus)
 </script>
 
 <style scoped>

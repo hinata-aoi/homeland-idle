@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import {
   BUILDINGS, PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS, KEY_BUILDINGS,
-  BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES, getBuilding,
+  BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES, getBuilding, getGrowthNeeded,
   POPULATION_CONFIG, DEMAND_CONFIG, POLICY_CONFIG,
   WAREHOUSE_CONFIG, OFFLINE_CONFIG
 } from './config.js'
@@ -26,10 +26,9 @@ export const useGameStore = defineStore('game', () => {
   // 人口系统
   const totalPopulation = ref(0)         // 独立状态：总人口数
   const populationAssigned = ref({})   // { buildingId: count }
-  const growthProgress = ref(0)         // 0 → growthThreshold
 
-  // 需求系统（食物值）
-  const foodValue = ref(0)              // 独立于仓库的食物值
+  // 需求系统（食物值 = 食物槽，既是存量也是进度条）
+  const foodValue = ref(0)
 
   // 政策系统
   const policyRates = ref({})           // { resourceId: ratePerSec }
@@ -66,8 +65,7 @@ export const useGameStore = defineStore('game', () => {
       populationAssigned.value[b.id] = 1
     }
 
-    growthProgress.value = 0
-    foodValue.value = 0
+    foodValue.value = Math.floor(getGrowthNeeded(POPULATION_CONFIG.initialPopulation) / 2)
     policyRates.value = {}
     for (const c of POLICY_CONFIG.conversions) {
       policyRates.value[c.input] = POLICY_CONFIG.defaultRate
@@ -100,9 +98,11 @@ export const useGameStore = defineStore('game', () => {
     return total
   }
 
-  // 增长进度百分比
+  // 食物槽进度百分比（食物值 / 增长所需）
   const growthPercent = computed(() => {
-    return Math.min(100, (growthProgress.value / POPULATION_CONFIG.growthThreshold) * 100)
+    const needed = getGrowthNeeded(totalPopulation.value)
+    if (needed <= 0) return 0
+    return Math.min(100, (foodValue.value / needed) * 100)
   })
 
   // 食物值消耗速率（每秒）
@@ -110,11 +110,23 @@ export const useGameStore = defineStore('game', () => {
     return totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec
   })
 
+  // 食物值净变化（每秒）
+  const foodValueSurplus = computed(() => {
+    let totalConversion = 0
+    for (const c of POLICY_CONFIG.conversions) {
+      const rate = policyRates.value[c.input] || 0
+      const available = resources.value[c.input] || 0
+      totalConversion += Math.min(rate, available) / c.ratio
+    }
+    return totalConversion - foodConsumption.value
+  })
+
   // 食物值状态
   const foodValueStatus = computed(() => {
-    if (foodValue.value >= DEMAND_CONFIG.feastThreshold) return 'feast'
-    if (foodValue.value > DEMAND_CONFIG.starveThreshold) return 'normal'
-    return 'starve'
+    const surplus = foodValueSurplus.value
+    if (surplus > 0.01) return 'surplus'
+    if (surplus < -0.01) return 'deficit'
+    return 'balanced'
   })
 
   // 获取某建筑的槽位数
@@ -432,11 +444,7 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    // 2. 食物值消耗
-    const consumed = foodConsumption.value
-    foodValue.value = Math.max(0, foodValue.value - consumed)
-
-    // 3. 生产建筑产出（有人口才工作）
+    // 2. 生产建筑产出（有人口才工作）
     for (const b of PRODUCTION_BUILDINGS) {
       const level = buildingLevels.value[b.id] || 1
       if (level < 1) continue
@@ -450,50 +458,22 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    // 4. 人口增长/衰减（基于食物值）
-    if (foodValue.value > DEMAND_CONFIG.starveThreshold) {
-      // 有食物值 → 增长
-      let speed = POPULATION_CONFIG.growthRate
-      if (foodValue.value >= DEMAND_CONFIG.feastThreshold) speed *= 2
-      // 食物值越多越快（cap at 2x from food value abundance）
-      const abundanceBonus = Math.min(2, 0.5 + foodValue.value / Math.max(1, DEMAND_CONFIG.feastThreshold))
-      speed *= abundanceBonus
+    // 3. 食物值消耗（每人每秒2点）
+    foodValue.value -= totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec
 
-      growthProgress.value += speed
-
-      while (growthProgress.value >= POPULATION_CONFIG.growthThreshold) {
-        growthProgress.value -= POPULATION_CONFIG.growthThreshold
-        if (totalPopulation.value < maxPopulation.value) {
-          totalPopulation.value++
-        }
-      }
-    } else {
-      // 食物值不足 → 衰减
-      let speed = POPULATION_CONFIG.declineRate
-      // 食物值越低衰减越快（0时最快）
-      if (foodValue.value <= 0) {
-        speed *= 1.5
-      } else {
-        speed *= (1 - foodValue.value / DEMAND_CONFIG.starveThreshold)
-      }
-
-      growthProgress.value -= speed
-
-      while (growthProgress.value < 0 && totalPopulation.value > 0) {
-        growthProgress.value += POPULATION_CONFIG.growthThreshold
-        removeOnePopulation()
-      }
+    // 4. 人口增长：食物槽满 → 涨人口
+    while (foodValue.value >= getGrowthNeeded(totalPopulation.value) &&
+           totalPopulation.value < maxPopulation.value) {
+      foodValue.value -= getGrowthNeeded(totalPopulation.value)
+      totalPopulation.value++
     }
 
-    // 限制进度条范围
-    growthProgress.value = Math.max(0, Math.min(
-      growthProgress.value,
-      POPULATION_CONFIG.growthThreshold * 2
-    ))
-
-    // 防止人口降为负数
-    if (totalPopulation.value <= 0) {
-      growthProgress.value = Math.max(0, growthProgress.value)
+    // 5. 人口衰减：食物槽空 → 减人口
+    if (foodValue.value <= 0 && totalPopulation.value > 0) {
+      removeOnePopulation()
+      if (totalPopulation.value > 0) {
+        foodValue.value = Math.floor(getGrowthNeeded(totalPopulation.value) / 2)
+      }
     }
 
     if (Math.floor(Date.now() / 1000) % 30 === 0) save()
@@ -538,8 +518,8 @@ export const useGameStore = defineStore('game', () => {
     }
 
     // 离线食物值消耗（50%速率）
-    const offlineConsumption = foodConsumption.value * cappedElapsed * 0.5
-    foodValue.value = Math.max(0, foodValue.value - offlineConsumption)
+    const offlineConsumption = totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec * cappedElapsed * DEMAND_CONFIG.offlineConsumptionRate
+    foodValue.value -= offlineConsumption
 
     // 离线生产
     for (const b of PRODUCTION_BUILDINGS) {
@@ -564,14 +544,18 @@ export const useGameStore = defineStore('game', () => {
       }
     }
 
-    // 离线人口增长（仅当食物值>0时缓慢增长，不衰减）
-    if (foodValue.value > 0 && totalPopulation.value < maxPopulation.value) {
-      const offlineGrowth = POPULATION_CONFIG.growthRate * 0.3 * cappedElapsed
-      growthProgress.value += offlineGrowth
-      while (growthProgress.value >= POPULATION_CONFIG.growthThreshold &&
-             totalPopulation.value < maxPopulation.value) {
-        growthProgress.value -= POPULATION_CONFIG.growthThreshold
-        totalPopulation.value++
+    // 离线人口变化（完整模拟增长+衰减）
+    // 增长：食物槽满 → 涨人口
+    while (foodValue.value >= getGrowthNeeded(totalPopulation.value) &&
+           totalPopulation.value < maxPopulation.value) {
+      foodValue.value -= getGrowthNeeded(totalPopulation.value)
+      totalPopulation.value++
+    }
+    // 衰减：食物槽空 → 减人口
+    while (foodValue.value <= 0 && totalPopulation.value > 0) {
+      removeOnePopulation()
+      if (totalPopulation.value > 0) {
+        foodValue.value = Math.floor(getGrowthNeeded(totalPopulation.value) / 2)
       }
     }
 
@@ -601,7 +585,6 @@ export const useGameStore = defineStore('game', () => {
         discoveredBuildings: discoveredBuildings.value,
         totalPopulation: totalPopulation.value,
         populationAssigned: populationAssigned.value,
-        growthProgress: growthProgress.value,
         foodValue: foodValue.value,
         policyRates: policyRates.value,
         lastSaveTime: lastSaveTime.value,
@@ -628,7 +611,6 @@ export const useGameStore = defineStore('game', () => {
         discoveredBuildings.value = data.discoveredBuildings || []
         totalPopulation.value = data.totalPopulation ?? POPULATION_CONFIG.initialPopulation
         populationAssigned.value = data.populationAssigned || {}
-        growthProgress.value = data.growthProgress || 0
         foodValue.value = data.foodValue ?? 0
         policyRates.value = data.policyRates || {}
         // 确保所有转化项都有默认值
@@ -694,11 +676,12 @@ export const useGameStore = defineStore('game', () => {
     // 状态
     resources, refined, buildingLevels, warehouseLevel,
     discoveredBuildings, lastSaveTime,
-    populationAssigned, growthProgress,
+    populationAssigned,
     showOfflineModal, offlineEarnings, offlineSeconds,
     // 人口计算
     totalPopulation, maxPopulation, unassignedPopulation,
-    growthPercent, foodConsumption, foodValue, foodValueStatus,
+    growthPercent, foodConsumption, foodValue, foodValueSurplus, foodValueStatus,
+    getGrowthNeeded,
     getBuildingSlots, getAssignedPop,
     // 容量
     totalCapacity, totalUsed, totalPercent,

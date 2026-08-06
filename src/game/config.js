@@ -28,9 +28,6 @@ export const ALL_RESOURCES = { ...BASIC_RESOURCES, ...REFINED_RESOURCES }
 
 export const POPULATION_CONFIG = {
   initialPopulation: 4,       // 初始人口数
-  growthThreshold: 100,       // 增长进度条满值
-  growthRate: 1.0,            // 基础增长速度（食物充裕时每秒+1进度）
-  declineRate: 1.0,           // 基础衰减速度（食物不足时每秒-1进度）
 }
 
 // ========================
@@ -38,9 +35,8 @@ export const POPULATION_CONFIG = {
 // ========================
 
 export const DEMAND_CONFIG = {
-  foodValuePerPersonPerSec: 0.05,  // 每人每秒消耗食物值
-  starveThreshold: 0,              // 食物值<=此值触发人口衰减
-  feastThreshold: 10,              // 食物值>=此值增长加速2x
+  foodValuePerPersonPerSec: 2,    // 每人每秒消耗食物值
+  offlineConsumptionRate: 0.5,    // 离线消耗速率倍率
 }
 
 // ========================
@@ -250,6 +246,15 @@ export const KEY_BUILDINGS = BUILDINGS.filter(b => b.type === 'key')
 
 export function getBuilding(id) {
   return BUILDINGS.find(b => b.id === id)
+}
+
+/**
+ * 计算从 n 人口增长到 n+1 所需的食物值
+ * 公式: 15 + 8*(n-1) + (n-1)^1.5
+ */
+export function getGrowthNeeded(n) {
+  if (n < 1) return 15
+  return 15 + 8 * (n - 1) + Math.pow(n - 1, 1.5)
 }
 
 // ========================
