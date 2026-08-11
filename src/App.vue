@@ -38,6 +38,8 @@
     <WarehousePanel v-if="tab === 'warehouse'" />
     <SettingsPanel v-if="tab === 'settings'" />
     <OfflineModal />
+    <UpgradeModal />
+    <EvolutionModal />
   </div>
 </template>
 
@@ -52,6 +54,8 @@ import PolicyPanel from './components/PolicyPanel.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import OfflineModal from './components/OfflineModal.vue'
+import UpgradeModal from './components/UpgradeModal.vue'
+import EvolutionModal from './components/EvolutionModal.vue'
 
 const store = useGameStore()
 const tab = ref('production')

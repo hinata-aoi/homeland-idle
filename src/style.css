@@ -49,6 +49,11 @@ button:active {
   transform: scale(0.96);
 }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -125,6 +130,12 @@ button:active {
   padding: 4px 10px;
   font-size: 0.8em;
   border-radius: 4px;
+}
+
+.recipe-active {
+  background: var(--accent);
+  color: #1a1a2e;
+  font-weight: 600;
 }
 
 .btn-green {
@@ -215,6 +226,29 @@ button:active {
   margin-right: 4px;
   background: var(--border);
   color: var(--text-dim);
+}
+
+/* 专精进化按钮（金色描边，区别于普通升级） */
+.evolve-btn {
+  background: var(--accent);
+  border: 1px solid #ffd700;
+  color: #1a1a2e;
+  font-weight: 600;
+}
+
+/* 回退按钮（灰色小按钮） */
+.revert-btn {
+  background: #444;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+/* 进化选择卡片 */
+.evolve-card {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
 }
 
 .tab-bar {

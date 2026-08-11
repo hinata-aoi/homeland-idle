@@ -17,7 +17,7 @@
       <!-- 食物槽进度条 -->
       <div style="margin-top:8px;">
         <div style="display:flex;justify-content:space-between;font-size:0.78em;color:var(--text-dim);">
-          <span>🍞 食物槽</span>
+          <span>📈 人口增长进度</span>
           <span>{{ store.fmt(store.foodValue) }} / {{ store.fmt(store.getGrowthNeeded(store.totalPopulation)) }}</span>
         </div>
         <div class="progress-bar" style="width:100%;margin:4px 0;">
@@ -68,7 +68,7 @@ const growthHint = computed(() => {
   const status = store.foodValueStatus
   if (store.totalPopulation >= store.maxPopulation) return '已达人口上限，升级聚集地以容纳更多'
   const surplus = store.foodValueSurplus
-  if (status === 'deficit') return `⚠️ 食物短缺 ${store.fmt(Math.abs(surplus))}/s，人口正在减少`
+  if (status === 'deficit') return `⚠️ 食物短缺 ${store.fmt(Math.abs(surplus))}/s，人口增长暂停，食物充足后恢复增长`
   if (status === 'balanced') return '食物供需平衡，人口稳定'
   return `食物盈余 +${store.fmt(surplus)}/s，人口正在增长`
 })
