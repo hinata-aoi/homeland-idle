@@ -32,7 +32,9 @@ src/
     ├── PolicyPanel.vue       # 📜 政策 — 食物值总览 + 资源转化滑条
     ├── WarehousePanel.vue    # 📦 仓库 — 每项资源的库存/容量进度条
     ├── SettingsPanel.vue     # ⚙️ 设置 — 存档、重置、调试工具
-    └── OfflineModal.vue      # 离线收益弹窗
+    ├── OfflineModal.vue      # 离线收益弹窗
+    ├── UpgradeModal.vue      # 升级预览弹窗（数值对比 + 里程碑预告的二次确认）
+    └── EvolutionModal.vue    # 专精进化弹窗（原建筑 Lv5 满级时选择 A/B 分支）
 ```
 
 ### 数据流（单向）

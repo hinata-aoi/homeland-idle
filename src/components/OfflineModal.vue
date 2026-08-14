@@ -6,11 +6,8 @@
         <p style="color:var(--text-dim);">你的家园继续运转，收获了：</p>
 
         <div v-for="(amount, key) in store.offlineEarnings" :key="key" style="margin:4px 0;">
-          <span v-if="!key.startsWith('auto_')" style="color:var(--accent);">
+          <span style="color:var(--accent);">
             {{ getResourceIcon(key) }} {{ getResourceName(key) }}: +{{ store.fmt(amount) }}
-          </span>
-          <span v-else style="color:var(--blue);font-size:0.85em;">
-            （里程碑自动产出: {{ getRefinedName(key.replace('auto_', '')) }} +{{ store.fmt(amount) }}）
           </span>
         </div>
 
@@ -29,14 +26,13 @@
 <script setup>
 import { computed } from 'vue'
 import { useGameStore } from '../game/store.js'
-import { BASIC_RESOURCES, REFINED_RESOURCES } from '../game/config.js'
+import { BASIC_RESOURCES } from '../game/config.js'
 
 const store = useGameStore()
 
 const hasOverflow = computed(() => {
   // 检查是否有资源已满（可能发生了溢出）
   for (const key of Object.keys(store.offlineEarnings)) {
-    if (key.startsWith('auto_')) continue
     const cap = store.getResourceCap(key)
     const amt = store.resources[key] ?? 0
     if (cap > 0 && amt >= cap * 0.99) return true
@@ -50,9 +46,5 @@ function getResourceIcon(key) {
 
 function getResourceName(key) {
   return BASIC_RESOURCES[key]?.name || key
-}
-
-function getRefinedName(key) {
-  return REFINED_RESOURCES[key]?.name || key
 }
 </script>
