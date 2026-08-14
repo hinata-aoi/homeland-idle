@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useGameStore } from './store.js'
 import { getGrowthNeeded, POLICY_CONFIG } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v6'
+const SAVE_KEY = 'homeland_save_v7'
 
 let store
 
@@ -473,7 +473,7 @@ describe('存档 save/load 与迁移', () => {
     store.setPolicyRate('wheat', 10)
     store.save()
     const snapshot = JSON.parse(localStorage.getItem(SAVE_KEY))
-    expect(snapshot.version).toBe(6)
+    expect(snapshot.version).toBe(7)
     expect(snapshot.totalPopulation).toBe(4)
     expect(snapshot.populationAssigned.farm).toBe(1)
     expect(snapshot.policyRates.wheat).toBe(10)
@@ -531,6 +531,168 @@ describe('存档 save/load 与迁移', () => {
   it('损坏存档返回 false', () => {
     localStorage.setItem(SAVE_KEY, 'not-json{{{')
     expect(store.load()).toBe(false)
+  })
+})
+
+describe('远征系统', () => {
+  // 解锁公会：市政厅升到 Lv3
+  function unlockGuild() {
+    store.buildingLevels.townhall = 3
+    store.checkUnlocks()
+  }
+
+  it('公会初始未解锁，市政厅 Lv3 后解锁且队伍为武装镇民（战力 10）', () => {
+    store.initNewGame()
+    expect(store.buildingLevels.guild).toBe(0)
+    expect(store.guildTeamPower).toBe(0)
+    unlockGuild()
+    expect(store.buildingLevels.guild).toBe(1)
+    expect(store.guildTeamName).toBe('武装镇民')
+    expect(store.guildTeamPower).toBe(10)
+  })
+
+  it('派遣：锁定战力与奖励，档位按战力/要求计算（10 vs 15 → 50-75 档）', () => {
+    store.initNewGame()
+    unlockGuild()
+    expect(store.startExpedition('grassland')).toBe(true)
+    const exp = store.expedition
+    expect(exp.mapId).toBe('grassland')
+    expect(exp.power).toBe(10)
+    expect(exp.tier).toBe('50-75') // 10/15 = 66.7%
+    expect(exp.rewards.wood).toBeGreaterThanOrEqual(200)
+    expect(exp.rewards.wood).toBeLessThanOrEqual(300)
+    expect(exp.rewards.stone).toBeGreaterThanOrEqual(100)
+    expect(exp.rewards.stone).toBeLessThanOrEqual(200)
+  })
+
+  it('远征中不能重复派遣；未解锁地图与未解锁公会不能派遣', () => {
+    store.initNewGame()
+    expect(store.startExpedition('grassland')).toBe(false) // 公会未解锁
+    unlockGuild()
+    expect(store.startExpedition('hills')).toBe(false) // 丘陵未全胜草原
+    expect(store.startExpedition('grassland')).toBe(true)
+    expect(store.startExpedition('grassland')).toBe(false) // 远征中
+  })
+
+  it('取消远征：无奖励，队伍返回后可再派', () => {
+    store.initNewGame()
+    unlockGuild()
+    const woodBefore = store.resources.wood
+    store.startExpedition('grassland')
+    expect(store.cancelExpedition()).toBe(true)
+    expect(store.expedition).toBeNull()
+    expect(store.resources.wood).toBe(woodBefore) // 无奖励
+    expect(store.startExpedition('grassland')).toBe(true)
+  })
+
+  it('到期自动结算发奖；非全胜不记录完成', () => {
+    store.initNewGame()
+    unlockGuild()
+    store.startExpedition('grassland')
+    const lockedRewards = { ...store.expedition.rewards }
+    // 时间推进到超时
+    store.expedition.startTime = Date.now() - store.expedition.durationSec * 1000 - 1000
+    store.tick()
+    expect(store.expedition).toBeNull()
+    expect(store.resources.wood).toBe(30 + lockedRewards.wood) // 初始 30 + 奖励
+    expect(store.completedMaps).not.toContain('grassland') // 50-75 档非全胜
+  })
+
+  it('全胜（≥100% 档）结算后记录完成，解锁下一张地图', () => {
+    store.initNewGame()
+    unlockGuild()
+    store.buildingLevels.guild = 2 // 民兵 战力 30 → 草原 200%
+    expect(store.guildTeamPower).toBe(30)
+    expect(store.startExpedition('grassland')).toBe(true)
+    expect(store.expedition.tier).toBe('gte100')
+    store.expedition.startTime = Date.now() - store.expedition.durationSec * 1000 - 1000
+    store.tick()
+    expect(store.completedMaps).toContain('grassland')
+    expect(store.isMapUnlocked('hills')).toBe(true)
+    expect(store.isMapUnlocked('deepForest')).toBe(false) // 丘陵未全胜
+    // 丘陵要求 40，民兵 30 → 75% 档
+    expect(store.startExpedition('hills')).toBe(true)
+    expect(store.expedition.tier).toBe('75-100')
+  })
+
+  it('档位边界：50% 为中档起始，75% 为中档，100% 为全胜', () => {
+    store.initNewGame()
+    expect(store.getExpeditionTier(7.5, 15)).toBe('50-75') // 恰 50%
+    expect(store.getExpeditionTier(10, 15)).toBe('50-75') // 66.7%
+    expect(store.getExpeditionTier(11.25, 15)).toBe('75-100') // 恰 75%
+    expect(store.getExpeditionTier(15, 15)).toBe('gte100') // 100%
+    expect(store.getExpeditionTier(20, 15)).toBe('gte100') // 133%
+    expect(store.getExpeditionTier(5, 15)).toBe('lt50') // 33%
+  })
+
+  it('远征状态随存档持久化', () => {
+    store.initNewGame()
+    unlockGuild()
+    store.startExpedition('grassland')
+    store.save()
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v7'))
+    expect(snapshot.version).toBe(7)
+    expect(snapshot.expedition.mapId).toBe('grassland')
+    // 重新加载恢复
+    store.expedition = null
+    expect(store.load()).toBe(true)
+    expect(store.expedition.mapId).toBe('grassland')
+  })
+
+  it('v6 旧存档迁移：无远征字段 → 空闲状态', () => {
+    localStorage.setItem('homeland_save_v6', JSON.stringify({
+      version: 6,
+      resources: { wheat: 10, wood: 20 },
+      refined: {},
+      buildingLevels: { farm: 1, townhall: 1, settlement: 1 },
+      warehouseLevel: 1,
+      discoveredBuildings: [],
+      totalPopulation: 4,
+      populationAssigned: {},
+      foodValue: 10,
+      policyRates: {},
+      processProgress: {},
+      activeRecipes: {},
+      activeHappinessEvents: [],
+      lastSaveTime: Date.now(),
+    }))
+    expect(store.load()).toBe(true)
+    expect(store.expedition).toBeNull()
+    expect(store.completedMaps).toEqual([])
+  })
+
+  it('加载时已超时的远征立即结算（离线照常计时）', () => {
+    store.initNewGame()
+    // 直接构造 v7 存档：3 小时前出发的草原远征（2h 时长，已超时）
+    const saveData = {
+      version: 7,
+      resources: { wheat: 50, wood: 30 },
+      refined: {},
+      buildingLevels: { farm: 1, townhall: 3, settlement: 1, guild: 1 },
+      warehouseLevel: 1,
+      discoveredBuildings: [],
+      totalPopulation: 4,
+      populationAssigned: {},
+      foodValue: 10,
+      policyRates: {},
+      processProgress: {},
+      activeRecipes: {},
+      activeHappinessEvents: [],
+      expedition: {
+        mapId: 'grassland',
+        startTime: Date.now() - 3 * 3600 * 1000,
+        power: 10,
+        tier: '50-75',
+        rewards: { wood: 250, stone: 150 },
+        durationSec: 2 * 3600,
+      },
+      completedMaps: [],
+      lastSaveTime: Date.now(),
+    }
+    localStorage.setItem('homeland_save_v7', JSON.stringify(saveData))
+    expect(store.load()).toBe(true)
+    expect(store.expedition).toBeNull() // 已结算
+    expect(store.resources.wood).toBe(30 + 250) // 奖励已发放
   })
 })
 

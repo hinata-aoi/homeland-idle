@@ -20,6 +20,10 @@
         <span v-else-if="b.passiveFood" style="font-size:0.82em;color:var(--text-dim);">
           食物 +{{ b.passiveFood }}/s
         </span>
+        <span v-else-if="b.id === 'guild'" style="font-size:0.82em;color:var(--text-dim);">
+          ⚔️ {{ b.teamName }} · 战力 {{ b.teamPower }}
+          <template v-if="b.level < b.maxLevel">→ {{ b.teamPowerNext }}</template>
+        </span>
       </div>
 
       <div v-if="b.nextMilestone" style="font-size:0.75em;color:var(--text-dim);margin-top:2px;">
@@ -43,6 +47,15 @@
           @click="store.openUpgradePreview(b.id)">
           升级
         </button>
+      </div>
+    </div>
+
+    <!-- 未解锁 -->
+    <div class="panel" v-if="store.lockedKeyBuildings.length > 0">
+      <h2>🔒 未解锁</h2>
+      <div v-for="b in store.lockedKeyBuildings" :key="b.id" style="font-size:0.82em;color:var(--text-dim);padding:3px 0;">
+        {{ b.icon }} {{ b.name }} — {{ b.description }}
+        <span style="color:var(--accent);">（{{ b.unlockReq }} 解锁）</span>
       </div>
     </div>
   </div>

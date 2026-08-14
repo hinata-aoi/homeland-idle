@@ -16,27 +16,33 @@
       </div>
     </header>
 
-    <!-- 标签栏 -->
-    <nav class="tab-bar">
-      <button :class="{ active: tab === 'production' }" @click="tab = 'production'">🏭 生产</button>
-      <button :class="{ active: tab === 'processing' }" @click="tab = 'processing'">
-        🔧 加工
-        <span v-if="store.unlockedProcessingBuildings.length > 0" class="tag" style="background:var(--accent);color:#1a1a2e;margin-left:4px;">{{ store.unlockedProcessingBuildings.length }}</span>
-      </button>
-      <button :class="{ active: tab === 'key' }" @click="tab = 'key'">🔑 关键</button>
-      <button :class="{ active: tab === 'population' }" @click="tab = 'population'">👥 人口</button>
-      <button :class="{ active: tab === 'policy' }" @click="tab = 'policy'">📜 政策</button>
-      <button :class="{ active: tab === 'warehouse' }" @click="tab = 'warehouse'">📦 仓库</button>
-      <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">⚙️</button>
-    </nav>
+    <!-- 主布局：左侧标签栏 + 右侧内容区 -->
+    <div class="main-layout">
+      <nav class="tab-bar">
+        <button :class="{ active: tab === 'production' }" @click="tab = 'production'">🏭<br>生产</button>
+        <button :class="{ active: tab === 'processing' }" @click="tab = 'processing'">
+          🔧<br>加工
+          <span v-if="store.unlockedProcessingBuildings.length > 0" class="tag" style="background:var(--accent);color:#1a1a2e;margin-left:2px;">{{ store.unlockedProcessingBuildings.length }}</span>
+        </button>
+        <button :class="{ active: tab === 'key' }" @click="tab = 'key'">🔑<br>关键</button>
+        <button :class="{ active: tab === 'expedition' }" @click="tab = 'expedition'">⚔️<br>远征</button>
+        <button :class="{ active: tab === 'population' }" @click="tab = 'population'">👥<br>人口</button>
+        <button :class="{ active: tab === 'policy' }" @click="tab = 'policy'">📜<br>政策</button>
+        <button :class="{ active: tab === 'warehouse' }" @click="tab = 'warehouse'">📦<br>仓库</button>
+        <button :class="{ active: tab === 'settings' }" @click="tab = 'settings'">⚙️<br>设置</button>
+      </nav>
 
-    <ProductionPanel v-if="tab === 'production'" />
-    <ProcessingPanel v-if="tab === 'processing'" />
-    <KeyPanel v-if="tab === 'key'" />
-    <PopulationPanel v-if="tab === 'population'" />
-    <PolicyPanel v-if="tab === 'policy'" />
-    <WarehousePanel v-if="tab === 'warehouse'" />
-    <SettingsPanel v-if="tab === 'settings'" />
+      <div class="content-area">
+        <ProductionPanel v-if="tab === 'production'" />
+        <ProcessingPanel v-if="tab === 'processing'" />
+        <KeyPanel v-if="tab === 'key'" />
+        <ExpeditionPanel v-if="tab === 'expedition'" />
+        <PopulationPanel v-if="tab === 'population'" />
+        <PolicyPanel v-if="tab === 'policy'" />
+        <WarehousePanel v-if="tab === 'warehouse'" />
+        <SettingsPanel v-if="tab === 'settings'" />
+      </div>
+    </div>
     <OfflineModal />
     <UpgradeModal />
     <EvolutionModal />
@@ -50,6 +56,7 @@ import ProductionPanel from './components/ProductionPanel.vue'
 import ProcessingPanel from './components/ProcessingPanel.vue'
 import PopulationPanel from './components/PopulationPanel.vue'
 import KeyPanel from './components/KeyPanel.vue'
+import ExpeditionPanel from './components/ExpeditionPanel.vue'
 import PolicyPanel from './components/PolicyPanel.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'

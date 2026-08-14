@@ -9,10 +9,11 @@ import {
   BASIC_RESOURCES, REFINED_RESOURCES, ALL_RESOURCES, getBuilding, getBuildingRecipes, getGrowthNeeded,
   POPULATION_CONFIG, DEMAND_CONFIG, POLICY_CONFIG,
   WAREHOUSE_CONFIG, OFFLINE_CONFIG, UPGRADE_COST_CONFIG,
-  HAPPINESS_CONFIG, getHappinessStatus
+  HAPPINESS_CONFIG, getHappinessStatus,
+  GUILD_CONFIG, EXPEDITION_MAPS, getExpeditionMap
 } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v6'
+const SAVE_KEY = 'homeland_save_v7'
 
 export const useGameStore = defineStore('game', () => {
   // ==================== 状态 ====================
@@ -55,6 +56,10 @@ export const useGameStore = defineStore('game', () => {
   const activeHappinessEvents = ref([])       // string[] — 当前激活的事件 id 列表
   const happinessEventCheckCounter = ref(0)   // 距下次事件检查的 tick 计数
 
+  // 远征系统
+  const expedition = ref(null)                // 当前远征 { mapId, startTime, power, tier, rewards, durationSec } 或 null（唯一队伍）
+  const completedMaps = ref([])               // string[] — 全胜（gte100 档）结算过的地图 id，用于解锁下一张
+
   // ==================== 初始化 ====================
 
   function initNewGame() {
@@ -66,7 +71,7 @@ export const useGameStore = defineStore('game', () => {
     }
     for (const b of BUILDINGS) {
       if (b.type === 'production') buildingLevels.value[b.id] = (b.unlockBy || b.evolvedOnly) ? 0 : 1 // 有 unlockBy 或进化专用(evolvedOnly)的生产建筑初始未解锁
-      else if (b.type === 'key') buildingLevels.value[b.id] = 1
+      else if (b.type === 'key') buildingLevels.value[b.id] = b.unlockBy ? 0 : 1 // 有 unlockBy 的关键建筑（如公会）初始未解锁，由市政厅里程碑解锁
       else buildingLevels.value[b.id] = 0 // 加工建筑未解锁
     }
     warehouseLevel.value = 1
@@ -96,6 +101,10 @@ export const useGameStore = defineStore('game', () => {
     activeHappinessEvents.value = []
     happinessEventCheckCounter.value = 0
     checkHappinessEvents()
+
+    // 初始化远征
+    expedition.value = null
+    completedMaps.value = []
 
     lastSaveTime.value = Date.now()
     checkUnlocks()
@@ -397,12 +406,32 @@ export const useGameStore = defineStore('game', () => {
   })
 
   const keyBuildings = computed(() => {
-    return KEY_BUILDINGS.map(b => {
-      const level = buildingLevels.value[b.id] || 1
-      const upgradeCost = getUpgradeCost(b, level)
-      const nextMilestone = getNextMilestone(b, level)
-      return { ...b, level, upgradeCost, nextMilestone }
-    })
+    return KEY_BUILDINGS
+      .filter(b => (buildingLevels.value[b.id] || 0) > 0)
+      .map(b => {
+        const level = buildingLevels.value[b.id] || 1
+        const upgradeCost = getUpgradeCost(b, level)
+        const nextMilestone = getNextMilestone(b, level)
+        // 公会：附加唯一远征队伍的当前/下一级战力（供关键面板展示）
+        const extra = b.id === 'guild' ? {
+          teamName: guildTeamName.value,
+          teamPower: guildTeamPower.value,
+          teamPowerNext: GUILD_CONFIG.teamPowerByLevel[Math.min(level + 1, GUILD_CONFIG.maxLevel)] || 0,
+        } : {}
+        return { ...b, level, upgradeCost, nextMilestone, ...extra }
+      })
+  })
+
+  // 未解锁的关键建筑（如公会：市政厅 Lv3 解锁）
+  const lockedKeyBuildings = computed(() => {
+    return KEY_BUILDINGS
+      .filter(b => (buildingLevels.value[b.id] || 0) === 0)
+      .map(b => ({
+        ...b,
+        unlockReq: b.unlockBy
+          ? `${getBuilding(b.unlockBy.building)?.name || '?'} Lv${b.unlockBy.level}`
+          : '未知条件'
+      }))
   })
 
   // ==================== 核心计算 ====================
@@ -858,6 +887,102 @@ export const useGameStore = defineStore('game', () => {
     activeHappinessEvents.value = newActive
   }
 
+  // ==================== 远征系统 ====================
+
+  // 唯一远征队伍的当前战力与名称（由公会等级决定）
+  const guildTeamPower = computed(() => {
+    const lv = buildingLevels.value.guild || 0
+    return GUILD_CONFIG.teamPowerByLevel[lv] || 0
+  })
+
+  const guildTeamName = computed(() => {
+    const lv = buildingLevels.value.guild || 0
+    return GUILD_CONFIG.teamNameByLevel[lv] || '未训练'
+  })
+
+  // 战力对比档位：队伍战力 ÷ 地图要求
+  // <50% 失败；[50%,75%) 低档；[75%,100%) 中档；>=100% 全胜
+  function getExpeditionTier(power, requirement) {
+    if (requirement <= 0) return 'gte100'
+    const ratio = power / requirement
+    if (ratio < 0.5) return 'lt50'
+    if (ratio < 0.75) return '50-75'
+    if (ratio < 1) return '75-100'
+    return 'gte100'
+  }
+
+  // 按档位随机生成奖励（出发时锁定）：{ resource: amount }
+  function rollExpeditionRewards(map, tier) {
+    const table = map.rewards[tier] || {}
+    const out = {}
+    for (const [res, [min, max]] of Object.entries(table)) {
+      out[res] = Math.floor(min + Math.random() * (max - min + 1))
+    }
+    return out
+  }
+
+  // 地图是否已解锁：首张图初始开放；其余需全胜前置地图
+  function isMapUnlocked(mapId) {
+    const map = getExpeditionMap(mapId)
+    if (!map) return false
+    if (!map.unlockAfter) return true
+    return completedMaps.value.includes(map.unlockAfter)
+  }
+
+  // 远征地图列表（供 UI）：附解锁状态与当前队伍在该图的预估档位
+  const expeditionMaps = computed(() => {
+    return EXPEDITION_MAPS.map(m => ({
+      ...m,
+      unlocked: isMapUnlocked(m.id),
+      tier: getExpeditionTier(guildTeamPower.value, m.powerRequirement),
+    }))
+  })
+
+  // 派遣远征：唯一队伍空闲时方可出发；出发即锁定战力/档位/奖励
+  function startExpedition(mapId) {
+    if (expedition.value) return false // 已有远征进行中
+    const map = getExpeditionMap(mapId)
+    if (!map) return false
+    if (!isMapUnlocked(mapId)) return false
+    const power = guildTeamPower.value
+    if (power <= 0) return false // 公会未解锁/未训练
+    const tier = getExpeditionTier(power, map.powerRequirement)
+    const rewards = rollExpeditionRewards(map, tier)
+    expedition.value = {
+      mapId: map.id,
+      startTime: Date.now(),
+      power,        // 出发时战力（锁档）
+      tier,
+      rewards,      // 出发时锁定的奖励
+      durationSec: map.durationSec,
+    }
+    save()
+    return true
+  }
+
+  // 取消远征：队伍返回，无任何奖励
+  function cancelExpedition() {
+    if (!expedition.value) return false
+    expedition.value = null
+    save()
+    return true
+  }
+
+  // 远征结算检查：到期自动发奖；全胜（gte100）记录完成用于解锁下一张
+  function checkExpeditionCompletion() {
+    const exp = expedition.value
+    if (!exp) return
+    if (Date.now() - exp.startTime < exp.durationSec * 1000) return
+    for (const [res, amount] of Object.entries(exp.rewards)) {
+      addResource(res, amount)
+    }
+    if (exp.tier === 'gte100' && !completedMaps.value.includes(exp.mapId)) {
+      completedMaps.value.push(exp.mapId)
+    }
+    expedition.value = null
+    save()
+  }
+
   // ==================== 游戏循环 ====================
 
   let tickInterval = null
@@ -893,6 +1018,9 @@ export const useGameStore = defineStore('game', () => {
   }
 
   function tick() {
+    // 0. 远征结算：到期自动发奖（真实时间倒计时）
+    checkExpeditionCompletion()
+
     // 幸福度增长修正用：记录本 tick 食物值变化的起点
     const foodBeforeHappiness = foodValue.value
 
@@ -1087,25 +1215,28 @@ export const useGameStore = defineStore('game', () => {
         activeRecipes: activeRecipes.value,
         activeHappinessEvents: activeHappinessEvents.value,
         happinessEventCheckCounter: happinessEventCheckCounter.value,
+        expedition: expedition.value,
+        completedMaps: completedMaps.value,
         lastSaveTime: lastSaveTime.value,
-        version: 6,
+        version: 7,
       }))
     } catch (e) { /* ignore */ }
   }
 
   function load() {
     try {
-      // 优先读取新版存档，缺失时回退到旧版 v5/v4 存档（自动迁移）
+      // 优先读取新版存档，缺失时回退到旧版 v6/v5/v4 存档（自动迁移）
       let raw = localStorage.getItem(SAVE_KEY)
+      if (!raw) raw = localStorage.getItem('homeland_save_v6')
       if (!raw) raw = localStorage.getItem('homeland_save_v5')
       if (!raw) raw = localStorage.getItem('homeland_save_v4')
       if (!raw) return false
-      // 从旧版键读到数据 → 写入新版键，后续 save 以 v6 覆盖
+      // 从旧版键读到数据 → 写入新版键，后续 save 以 v7 覆盖
       if (localStorage.getItem(SAVE_KEY) !== raw) {
         localStorage.setItem(SAVE_KEY, raw)
       }
       const data = JSON.parse(raw)
-      if (data.version !== 4 && data.version !== 5 && data.version !== 6) return false
+      if (data.version !== 4 && data.version !== 5 && data.version !== 6 && data.version !== 7) return false
 
       resources.value = data.resources || {}
       refined.value = data.refined || {}
@@ -1174,11 +1305,16 @@ export const useGameStore = defineStore('game', () => {
       // 迁移：旧存档无幸福度状态 → 初始化为空；有新存档则恢复
       activeHappinessEvents.value = data.activeHappinessEvents || []
       happinessEventCheckCounter.value = data.happinessEventCheckCounter || 0
+      // 迁移：v7 远征状态（旧存档无 → 空闲，未全胜过任何地图）
+      expedition.value = data.expedition || null
+      completedMaps.value = data.completedMaps || []
       lastSaveTime.value = data.lastSaveTime || Date.now()
       calculateOffline()
       // 离线模拟可能改变了资源/人口，重新检查事件确保激活状态正确
       checkHappinessEvents()
       checkUnlocks()
+      // 远征为真实时间倒计时：加载时若已超时立即结算（离线期间照常计时）
+      checkExpeditionCompletion()
       return true
     } catch (e) {
       return false
@@ -1254,7 +1390,7 @@ export const useGameStore = defineStore('game', () => {
     // 建筑列表
     productionBuildings, lockedProductionBuildings,
     unlockedProcessingBuildings, lockedProcessingBuildings,
-    keyBuildings,
+    keyBuildings, lockedKeyBuildings,
     getResourceCap, getResourceAmount,
     // 配方系统
     getActiveRecipe, getAvailableRecipes, setActiveRecipe,
@@ -1271,6 +1407,12 @@ export const useGameStore = defineStore('game', () => {
     happinessGrowthMultiplier, happinessOutputMultiplier,
     passiveHappinessBonuses,
     checkHappinessEvents, HAPPINESS_CONFIG, getHappinessStatus,
+    // 远征系统
+    expedition, completedMaps,
+    guildTeamPower, guildTeamName,
+    expeditionMaps, isMapUnlocked, getExpeditionTier,
+    startExpedition, cancelExpedition, checkExpeditionCompletion,
+    EXPEDITION_MAPS, GUILD_CONFIG,
     // 加工与进化（供测试与调试直接调用）
     processBuildingPerSecond, checkUnlocks, isEvolvedAway,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,

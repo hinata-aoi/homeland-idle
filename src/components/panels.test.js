@@ -8,6 +8,7 @@ import { useGameStore } from '../game/store.js'
 import ProductionPanel from './ProductionPanel.vue'
 import UpgradeModal from './UpgradeModal.vue'
 import EvolutionModal from './EvolutionModal.vue'
+import ExpeditionPanel from './ExpeditionPanel.vue'
 
 let pinia
 let store
@@ -104,5 +105,37 @@ describe('EvolutionModal 专精进化弹窗', () => {
     expect(evolveBtn.disabled).toBe(true)
     evolveBtn.click()
     expect(store.buildingLevels.fertileFarm).toBe(0)
+  })
+})
+
+describe('ExpeditionPanel 远征面板', () => {
+  it('公会未解锁时显示提示且无法派遣', () => {
+    const w = mountWithPinia(ExpeditionPanel)
+    expect(w.text()).toContain('远征队')
+    expect(w.text()).toContain('草原')
+    expect(w.text()).toContain('公会尚未解锁')
+    const sendBtn = w.findAll('button').find(b => b.text() === '派遣')
+    expect(sendBtn).toBeTruthy()
+    expect(sendBtn.attributes('disabled')).toBeDefined()
+  })
+
+  it('公会解锁后可派遣草原，派遗后显示远征进行中并可取消', async () => {
+    store.buildingLevels.townhall = 3
+    store.checkUnlocks()
+    expect(store.guildTeamPower).toBe(10)
+    const w = mountWithPinia(ExpeditionPanel)
+    const sendBtn = w.findAll('button').find(b => b.text() === '派遣')
+    expect(sendBtn.attributes('disabled')).toBeUndefined()
+    await sendBtn.trigger('click')
+    expect(store.expedition).not.toBeNull()
+    expect(store.expedition.mapId).toBe('grassland')
+    expect(store.expedition.tier).toBe('50-75') // 10 vs 15
+    // 重新渲染显示远征进行中
+    await w.vm.$nextTick()
+    expect(w.text()).toContain('远征进行中')
+    const cancelBtn = w.findAll('button').find(b => b.text().includes('取消远征'))
+    expect(cancelBtn).toBeTruthy()
+    await cancelBtn.trigger('click')
+    expect(store.expedition).toBeNull()
   })
 })

@@ -773,7 +773,7 @@ export const BUILDINGS = [
     passiveFood: 2,  // 每秒被动产出食物值，防止最后人口被饿死
     milestones: {
       2: { desc: '解锁加工建筑 + 采石场 + 深山 + 诊所', unlockBuildings: ['sawmill', 'mason', 'mill', 'quarry', 'deepMountain', 'clinic'] },
-      3: { desc: '解锁狩猎场 + 制皮坊', unlockBuildings: ['hunting', 'tannery'] },
+      3: { desc: '解锁狩猎场 + 制皮坊 + 公会', unlockBuildings: ['hunting', 'tannery', 'guild'] },
     }
   },
   {
@@ -790,6 +790,26 @@ export const BUILDINGS = [
     milestones: {
       5:  { desc: '人口增长加速 +50%', bonus: 0 },
       10: { desc: '人口上限额外 +10', bonus: 0 },
+    }
+  },
+
+  // 公会：市政厅Lv3解锁（key），等级提升唯一远征队伍的战力（Lv5封顶）
+  {
+    id: 'guild',
+    type: 'key',
+    name: '公会',
+    icon: '⚔️',
+    description: '训练远征队伍，等级提升队伍战力',
+    baseCost: 120,
+    costMultiplier: 2.0,
+    costResource: 'wood',
+    maxLevel: 5,          // 公会 Lv5 封顶（队伍战力表见 GUILD_CONFIG）
+    unlockBy: { building: 'townhall', level: 3 },
+    milestones: {
+      2: { desc: '队伍升级为「民兵」，战力 30' },
+      3: { desc: '队伍升级为「卫兵」，战力 60' },
+      4: { desc: '队伍升级为「骑士」，战力 100' },
+      5: { desc: '队伍升级为「精锐」，战力 160' },
     }
   },
 ]
@@ -905,3 +925,123 @@ export function getHappinessStatus(netPoints) {
   // 兜底（-999 全量捕获，理论上不会到达）
   return HAPPINESS_CONFIG.statusLevels[HAPPINESS_CONFIG.statusLevels.length - 1]
 }
+
+// ========================
+// 远征系统配置
+// ========================
+
+// 公会建筑配置：等级 → 唯一远征队伍的战力与名称
+// 公会升级不增加队伍数量，仅提升唯一队伍的战力（与远征地图的 powerRequirement 对比结算）
+export const GUILD_CONFIG = {
+  maxLevel: 5,
+  teamPowerByLevel: {
+    1: 10,   // 武装镇民
+    2: 30,   // 民兵
+    3: 60,   // 卫兵
+    4: 100,  // 骑士
+    5: 160,  // 精锐
+  },
+  teamNameByLevel: {
+    1: '武装镇民',
+    2: '民兵',
+    3: '卫兵',
+    4: '骑士',
+    5: '精锐',
+  },
+}
+
+// 远征地图表
+// 结算档位（队伍战力 ÷ 地图战力要求）：
+//   'lt50'    < 50%       远征失败，无奖励
+//   '50-75'   [50%, 75%)  基础奖励低档
+//   '75-100'  [75%, 100%) 基础奖励中档
+//   'gte100'  >= 100%     全额 + 额外奖励（全胜）
+// 每档 rewards 为固定奖励表：{ resourceId: [min, max] }，结算时在范围内随机整数
+// unlockAfter：全胜（gte100 档结算）该地图后解锁下一张；首张图无此字段
+export const EXPEDITION_MAPS = [
+  {
+    id: 'grassland',
+    name: '草原',
+    icon: '🌿',
+    description: '平坦开阔的草原，游荡着零星的野兽',
+    powerRequirement: 15,
+    durationSec: 2 * 3600,
+    rewards: {
+      'lt50': {},
+      '50-75': { wood: [200, 300], stone: [100, 200] },
+      '75-100': { wood: [400, 550], stone: [200, 300], wheat: [100, 150] },
+      'gte100': { wood: [650, 850], stone: [350, 500], wheat: [200, 300], wine: [10, 20] },
+    },
+  },
+  {
+    id: 'hills',
+    name: '丘陵',
+    icon: '⛰️',
+    description: '连绵起伏的丘陵，隐藏着成群的山羊与狼',
+    powerRequirement: 40,
+    durationSec: 4 * 3600,
+    unlockAfter: 'grassland',
+    rewards: {
+      'lt50': {},
+      '50-75': { wood: [400, 600], stone: [200, 350] },
+      '75-100': { wood: [700, 950], stone: [350, 500], wheat: [200, 300] },
+      'gte100': { wood: [1000, 1300], stone: [500, 700], wheat: [300, 450], wine: [30, 50] },
+    },
+  },
+  {
+    id: 'deepForest',
+    name: '森林深处',
+    icon: '🌲',
+    description: '古木参天的密林，野兽凶猛且药材丰富',
+    powerRequirement: 80,
+    durationSec: 8 * 3600,
+    unlockAfter: 'hills',
+    rewards: {
+      'lt50': {},
+      '50-75': { wood: [800, 1100], stone: [400, 600] },
+      '75-100': { wood: [1300, 1700], stone: [650, 900], wheat: [400, 600] },
+      'gte100': { wood: [1800, 2300], stone: [900, 1200], wheat: [600, 800], wine: [60, 100] },
+    },
+  },
+  {
+    id: 'snowMountain',
+    name: '雪山',
+    icon: '🏔️',
+    description: '终年积雪的山脉，寒风刺骨、物资稀缺',
+    powerRequirement: 130,
+    durationSec: 12 * 3600,
+    unlockAfter: 'deepForest',
+    rewards: {
+      'lt50': {},
+      '50-75': { wood: [1200, 1600], stone: [600, 900], plank: [50, 80] },
+      '75-100': { wood: [2000, 2600], stone: [1000, 1400], wheat: [600, 900], plank: [80, 120] },
+      'gte100': { wood: [2800, 3600], stone: [1400, 1800], wheat: [900, 1200], wine: [100, 150], plank: [100, 150] },
+    },
+  },
+  {
+    id: 'desert',
+    name: '荒漠',
+    icon: '🏜️',
+    description: '广袤的沙漠，传闻埋藏着古老文明的遗物',
+    powerRequirement: 200,
+    durationSec: 16 * 3600,
+    unlockAfter: 'snowMountain',
+    rewards: {
+      'lt50': {},
+      '50-75': { wood: [1600, 2100], stone: [800, 1200], brick: [50, 80] },
+      '75-100': { wood: [2600, 3400], stone: [1300, 1800], wheat: [800, 1200], brick: [80, 120] },
+      'gte100': { wood: [3600, 4600], stone: [1800, 2400], wheat: [1200, 1600], wine: [150, 220], brick: [100, 150] },
+    },
+  },
+]
+
+export function getExpeditionMap(id) {
+  return EXPEDITION_MAPS.find(m => m.id === id)
+}
+
+/**
+ * 远征战力强化配置（预留位，本次不实现 UI）
+ * 未来：铁匠铺生产铁剑等，政策/界面消耗资源 → 下次远征战力加成
+ * 结构约定：{ id, name, description, powerBonusPercent, cost: { resource, amount } }
+ */
+export const EXPEDITION_BUFFS = []
