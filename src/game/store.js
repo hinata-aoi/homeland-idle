@@ -1260,6 +1260,8 @@ export const useGameStore = defineStore('game', () => {
     happinessNetPoints, happinessStatus,
     happinessGrowthMultiplier, happinessOutputMultiplier,
     checkHappinessEvents, HAPPINESS_CONFIG, getHappinessStatus,
+    // 加工与进化（供测试与调试直接调用）
+    processBuildingPerSecond, checkUnlocks, isEvolvedAway,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,
     save, load, resetGame,
     setResourceAmount, fillAllResources,
