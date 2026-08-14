@@ -282,22 +282,43 @@ describe('幸福度系统', () => {
 
   it('净幸福度 = 点数 − ⌊人口/2⌋，状态影响产出倍率', () => {
     store.initNewGame()
-    // 4 人口 → 需求 2；激活 1 点 → 净 -1 → 不开心（产出 -5%）
+    // 4 人口 → 需求 2；激活淡水事件(+1) + 聚集地被动(+1) → 净 0 → 满意（无修正）
     store.resources.freshWater = store.totalPopulation * 200
     store.checkHappinessEvents()
+    expect(store.happinessPoints).toBe(2)
     expect(store.happinessDemand).toBe(2)
+    expect(store.happinessNetPoints).toBe(0)
+    expect(store.happinessStatus.name).toBe('满意')
+    expect(store.happinessOutputMultiplier).toBeCloseTo(1, 5)
+  })
+
+  it('聚集地被动幸福度：Lv1 起常驻 +1 点，不计入事件表，等级回退收回', () => {
+    store.initNewGame()
+    expect(store.happinessPoints).toBe(1) // 仅被动（无激活事件）
+    expect(store.activeHappinessEvents).toEqual([]) // 不走事件表
+    expect(store.passiveHappinessBonuses).toHaveLength(1)
+    expect(store.passiveHappinessBonuses[0].building).toBe('settlement')
+    // 聚集地等级降为 0（异常/未来可回退场景）→ 被动收回
+    store.buildingLevels.settlement = 0
+    expect(store.happinessPoints).toBe(0)
+    expect(store.passiveHappinessBonuses).toHaveLength(0)
+  })
+
+  it('被动加成把初始净幸福度从 -2 提升到 -1（仍为不开心档）', () => {
+    store.initNewGame()
+    // 被动 1 − 需求 2 = −1 → 不开心（产出 −5%）
     expect(store.happinessNetPoints).toBe(-1)
     expect(store.happinessStatus.name).toBe('不开心')
     expect(store.happinessOutputMultiplier).toBeCloseTo(0.95, 5)
   })
 
-  it('tick 中产出倍率生效（-5% → 农田 3×0.95）', () => {
+  it('tick 中产出倍率随状态生效（激活事件后满意 → 满速产出）', () => {
     store.initNewGame()
     store.resources.freshWater = store.totalPopulation * 200
     store.checkHappinessEvents()
     store.assignPop('farm')
     store.tick()
-    expect(store.resources.wheat).toBeCloseTo(50 + 3 * 0.95, 5)
+    expect(store.resources.wheat).toBeCloseTo(53, 5) // 50 + 3×1×1（满意无修正）
   })
 
   it('增长修正仅作用于盈余：赤字时不受影响', () => {

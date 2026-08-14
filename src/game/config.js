@@ -849,6 +849,13 @@ export const OFFLINE_CONFIG = {
 export const HAPPINESS_CONFIG = {
   eventCheckInterval: 5,   // 每 N 秒检查一次事件
 
+  // 建筑被动幸福度：建筑达到指定等级即常驻获得点数
+  // 与事件表不同：不经过 5 秒检查，等级满足即时生效；等级回退即收回
+  // 新增被动时添加 { building, level, points }
+  passiveBonuses: [
+    { building: 'settlement', level: 1, points: 1 },   // 聚集地 Lv1 起：居住条件改善 +1
+  ],
+
   // 幸福度事件表：满足条件获得点数，不再满足收回
   // 新增事件时添加 { id, name, description, icon, points, check(state) }
   events: [

@@ -1,7 +1,7 @@
 <template>
   <div>
     <!-- 内部子 Tab 栏 -->
-    <nav class="tab-bar">
+    <nav class="tab-bar tab-bar--inline">
       <button :class="{ active: subTab === 'food' }" @click="subTab = 'food'">📤 食物发放</button>
       <button :class="{ active: subTab === 'happiness' }" @click="subTab = 'happiness'">😊 幸福度</button>
     </nav>
@@ -129,6 +129,17 @@
             </div>
           </div>
         </div>
+        <!-- 建筑被动加成（常驻，不走事件表） -->
+        <div v-if="store.passiveHappinessBonuses.length > 0"
+          style="padding:8px 0;border-top:1px solid rgba(255,255,255,0.04);">
+          <div v-for="bonus in store.passiveHappinessBonuses" :key="bonus.building"
+            style="font-size:0.85em;color:var(--green);">
+            {{ buildingInfo(bonus.building).icon }} {{ buildingInfo(bonus.building).name }} Lv{{ bonus.level }}+：常驻 +{{ bonus.points }}
+          </div>
+          <div style="font-size:0.72em;color:var(--text-dim);padding-top:2px;">
+            🏛️ 建筑被动加成：等级满足即生效，等级回退后收回（不经过事件检查）。
+          </div>
+        </div>
         <div style="font-size:0.72em;color:var(--text-dim);padding-top:6px;border-top:1px solid rgba(255,255,255,0.04);">
           💡 事件满足条件时获得幸福度，条件不再满足时收回。
         </div>
@@ -157,10 +168,16 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useGameStore } from '../game/store.js'
+import { getBuilding } from '../game/config.js'
 const store = useGameStore()
 
 // 政策面板内部子 Tab
 const subTab = ref('food')
+
+function buildingInfo(id) {
+  const b = getBuilding(id)
+  return { icon: b?.icon || '🏛️', name: b?.name || id }
+}
 
 function getResName(key) {
   return store.ALL_RESOURCES[key]?.name || key

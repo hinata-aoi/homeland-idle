@@ -179,14 +179,24 @@ export const useGameStore = defineStore('game', () => {
 
   // ==================== 幸福度系统 ====================
 
-  // 幸福度点数：当前激活事件的点数总和
+  // 幸福度点数：当前激活事件的点数总和 + 建筑被动加成（常驻，不经过事件检查）
   const happinessPoints = computed(() => {
     let total = 0
     for (const eventId of activeHappinessEvents.value) {
       const ev = HAPPINESS_CONFIG.events.find(e => e.id === eventId)
       if (ev) total += ev.points
     }
+    for (const bonus of HAPPINESS_CONFIG.passiveBonuses || []) {
+      if ((buildingLevels.value[bonus.building] || 0) >= bonus.level) total += bonus.points
+    }
     return total
+  })
+
+  // 实际生效的建筑被动幸福度（当前等级满足条件；供 UI 展示点数来源）
+  const passiveHappinessBonuses = computed(() => {
+    return (HAPPINESS_CONFIG.passiveBonuses || []).filter(bonus =>
+      (buildingLevels.value[bonus.building] || 0) >= bonus.level
+    )
   })
 
   // 幸福度需求：每 2 人需要 1 点（1人0点，2人1点，3人1点，4人2点）
@@ -1259,6 +1269,7 @@ export const useGameStore = defineStore('game', () => {
     activeHappinessEvents, happinessPoints, happinessDemand,
     happinessNetPoints, happinessStatus,
     happinessGrowthMultiplier, happinessOutputMultiplier,
+    passiveHappinessBonuses,
     checkHappinessEvents, HAPPINESS_CONFIG, getHappinessStatus,
     // 加工与进化（供测试与调试直接调用）
     processBuildingPerSecond, checkUnlocks, isEvolvedAway,
