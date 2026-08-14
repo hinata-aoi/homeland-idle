@@ -291,7 +291,7 @@ export const BUILDINGS = [
     description: '放牧牛群',
     produces: 'milk',
     baseRate: 2,          // 兼容占位（实际产出由 recipes 定义）
-    ratePerLevel: 0.25,   // 牛奶 +0.5/s；兽肉/兽皮增量有偏差，见开发文档
+    ratePerLevel: 0.25,   // 每级每人：牛奶 +0.5/s、兽肉 +0.125/s、兽皮 +0.125/s（数值经产品确认，保持现状）
     baseCost: 25,
     costMultiplier: 1.7,
     costResource: 'wood',
@@ -424,7 +424,7 @@ export const BUILDINGS = [
     description: '养鱼与蓄水',
     produces: 'fish',
     baseRate: 2,          // 兼容占位（实际产出由 recipes 定义）
-    ratePerLevel: 0.25,   // 鱼 +0.5/s；淡水增量有偏差（+0.75/s），见开发文档
+    ratePerLevel: 0.25,   // 每级每人：鱼 +0.5/s、淡水 +0.75/s（数值经产品确认，保持现状）
     baseCost: 12,
     costMultiplier: 1.5,
     costResource: 'wood',
