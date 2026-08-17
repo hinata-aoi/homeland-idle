@@ -9,6 +9,7 @@ import ProductionPanel from './ProductionPanel.vue'
 import UpgradeModal from './UpgradeModal.vue'
 import EvolutionModal from './EvolutionModal.vue'
 import ExpeditionPanel from './ExpeditionPanel.vue'
+import PolicyPanel from './PolicyPanel.vue'
 
 let pinia
 let store
@@ -137,5 +138,28 @@ describe('ExpeditionPanel 远征面板', () => {
     expect(cancelBtn).toBeTruthy()
     await cancelBtn.trigger('click')
     expect(store.expedition).toBeNull()
+  })
+})
+
+describe('PolicyPanel 税务 Tab', () => {
+  it('税所未解锁时显示提示', () => {
+    const w = mountWithPinia(PolicyPanel)
+    expect(w.text()).toContain('食物发放') // 默认子 Tab
+    expect(w.text()).toContain('税务') // 子 Tab 按钮
+  })
+
+  it('税所解锁后显示档位并可切换', async () => {
+    store.buildingLevels.townhall = 4
+    store.checkUnlocks()
+    const w = mountWithPinia(PolicyPanel)
+    const taxTabBtn = w.findAll('button').find(b => b.text().includes('税务'))
+    await taxTabBtn.trigger('click')
+    expect(w.text()).toContain('税所 Lv1')
+    expect(w.text()).toContain('不征税')
+    expect(w.text()).toContain('轻税')
+    const heavyBtn = w.findAll('button').find(b => b.text() === '重税')
+    await heavyBtn.trigger('click')
+    expect(store.taxRate).toBe('heavy')
+    expect(w.text()).toContain('幸福度 -3')
   })
 })

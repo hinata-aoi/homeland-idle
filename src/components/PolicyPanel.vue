@@ -3,6 +3,7 @@
     <!-- 内部子 Tab 栏 -->
     <nav class="tab-bar tab-bar--inline">
       <button :class="{ active: subTab === 'food' }" @click="subTab = 'food'">📤 食物发放</button>
+      <button :class="{ active: subTab === 'tax' }" @click="subTab = 'tax'">💰 税务</button>
       <button :class="{ active: subTab === 'happiness' }" @click="subTab = 'happiness'">😊 幸福度</button>
     </nav>
 
@@ -56,6 +57,51 @@
           <span style="font-size:0.85em;font-weight:600;color:var(--accent);">
             {{ store.fmt(totalFoodOutput) }} 食物值/s
           </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ 税务 Tab ============ -->
+    <div v-if="subTab === 'tax'">
+      <!-- 税所未解锁 -->
+      <div class="panel" v-if="(store.buildingLevels.taxOffice || 0) < 1">
+        <h2>🏦 税务</h2>
+        <p style="font-size:0.85em;color:var(--text-dim);margin:0;">
+          🔒 税所尚未解锁：将市政厅升至 Lv4（关键建筑选项卡内建造）。
+        </p>
+      </div>
+
+      <!-- 已解锁：档位选择 -->
+      <div class="panel" v-else>
+        <h2>🏦 税务 · 税所 Lv{{ store.buildingLevels.taxOffice }}</h2>
+        <div style="font-size:0.8em;color:var(--text-dim);margin-bottom:8px;">
+          🪙 当前金币：<strong style="color:var(--accent);">{{ store.fmt(store.gold) }}</strong>
+          &nbsp;·&nbsp; 按总人口（含空闲）征税，每 30 分钟结算一轮
+        </div>
+
+        <div v-for="tier in store.taxTiers" :key="tier.id"
+          style="padding:8px 0;border-top:1px solid rgba(255,255,255,0.04);display:flex;align-items:center;gap:8px;">
+          <button class="btn-sm"
+            :class="{ 'recipe-active': tier.id === store.taxRate }"
+            style="min-width:76px;"
+            @click="store.setTaxRate(tier.id)">
+            {{ tier.name }}
+          </button>
+          <div style="flex:1;font-size:0.8em;color:var(--text-dim);">
+            每轮每人 <strong style="color:var(--text);">{{ tier.goldPerPerson }}</strong> 金币
+            <span style="opacity:0.6;">（当前 {{ store.totalPopulation }} 人 → {{ tier.goldPerPerson * store.totalPopulation }} 金币/轮）</span>
+          </div>
+          <span style="font-size:0.8em;" :style="{ color: happinessColor(tier.happiness) }">
+            {{ happinessText(tier.happiness) }}
+          </span>
+        </div>
+
+        <div style="font-size:0.75em;color:var(--text-dim);padding-top:6px;border-top:1px solid rgba(255,255,255,0.04);">
+          ⏳ 下一轮结算：{{ fmtNextCollect }}
+          <span v-if="!isTaxing" style="color:var(--text-dim);">（当前不征税）</span>
+          <div style="margin-top:2px;">
+            💡 档位幸福度修正常驻生效（换档立即生效）；金币按真实时间结算，离线期间照常累计。
+          </div>
         </div>
       </div>
     </div>
@@ -166,13 +212,38 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '../game/store.js'
 import { getBuilding } from '../game/config.js'
 const store = useGameStore()
 
 // 政策面板内部子 Tab
 const subTab = ref('food')
+
+// --- 税务 UI 辅助 ---
+
+// 幸福度修正 → 文本（如 +1 / -3 / 不变）
+function happinessText(mod) {
+  if (mod > 0) return `幸福度 +${mod}`
+  if (mod < 0) return `幸福度 ${mod}`
+  return '幸福度不变'
+}
+
+// 当前是否在征税（金币 > 0 的档位）
+const isTaxing = computed(() => (store.currentTaxTier?.goldPerPerson || 0) > 0)
+
+// 下一轮结算倒计时（本地 1s 刷新，不依赖 store）
+const nowTax = ref(Date.now())
+let taxTimer = null
+onMounted(() => { taxTimer = setInterval(() => { nowTax.value = Date.now() }, 1000) })
+onUnmounted(() => { if (taxTimer) clearInterval(taxTimer) })
+
+const fmtNextCollect = computed(() => {
+  const tier = store.currentTaxTier
+  if (!tier || tier.goldPerPerson <= 0) return '—'
+  const remain = Math.max(0, store.TAX_CONFIG.settlementIntervalSec - Math.floor((nowTax.value - store.lastTaxCollectTime) / 1000))
+  return store.fmtTime(remain)
+})
 
 function buildingInfo(id) {
   const b = getBuilding(id)

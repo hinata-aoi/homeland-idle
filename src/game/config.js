@@ -774,6 +774,7 @@ export const BUILDINGS = [
     milestones: {
       2: { desc: '解锁加工建筑 + 采石场 + 深山 + 诊所', unlockBuildings: ['sawmill', 'mason', 'mill', 'quarry', 'deepMountain', 'clinic'] },
       3: { desc: '解锁狩猎场 + 制皮坊 + 公会', unlockBuildings: ['hunting', 'tannery', 'guild'] },
+      4: { desc: '解锁税所', unlockBuildings: ['taxOffice'] },
     }
   },
   {
@@ -810,6 +811,25 @@ export const BUILDINGS = [
       3: { desc: '队伍升级为「卫兵」，战力 60' },
       4: { desc: '队伍升级为「骑士」，战力 100' },
       5: { desc: '队伍升级为「精锐」，战力 160' },
+    }
+  },
+
+  // 税所：市政厅Lv4解锁（key），按人口征税获得金币（金币不占仓库、无上限）
+  // 最高 3 级、无专精化升级；档位表见 TAX_CONFIG.tiersByLevel
+  {
+    id: 'taxOffice',
+    type: 'key',
+    name: '税所',
+    icon: '🏦',
+    description: '按人口征税获得金币，档位越高幸福度惩罚越大',
+    baseCost: 150,
+    costMultiplier: 2.0,
+    costResource: 'wood',
+    maxLevel: 3,          // 税所最高 3 级，无专精化
+    unlockBy: { building: 'townhall', level: 4 },
+    milestones: {
+      2: { desc: '除不征税外，各征税档位金币 +1/人' },
+      3: { desc: '除不征税外，各档位幸福度 +1；新增高档位 15 金币/人（幸福度 -4）' },
     }
   },
 ]
@@ -1045,3 +1065,40 @@ export function getExpeditionMap(id) {
  * 结构约定：{ id, name, description, powerBonusPercent, cost: { resource, amount } }
  */
 export const EXPEDITION_BUFFS = []
+
+// ========================
+// 税所/货币系统配置
+// ========================
+
+// 税所档位表：按税所等级 → 档位列表
+// 每档：{ id, name, goldPerPerson（每轮每人金币）, happiness（常驻幸福度修正） }
+// 金币每 settlementIntervalSec 秒结算一轮，按总人口（含空闲）发放，不占仓库、无上限
+// 档位幸福度修正常驻生效（类似建筑被动加成，可正可负），换档立即生效
+export const TAX_CONFIG = {
+  settlementIntervalSec: 30 * 60,   // 每 30 分钟结算一轮金币
+  tiersByLevel: {
+    1: [
+      { id: 'none',   name: '不征税', goldPerPerson: 0,  happiness: 1 },
+      { id: 'light',  name: '轻税',   goldPerPerson: 3,  happiness: 0 },
+      { id: 'normal', name: '常规税', goldPerPerson: 5,  happiness: -1 },
+      { id: 'heavy',  name: '重税',   goldPerPerson: 9,  happiness: -3 },
+    ],
+    2: [
+      { id: 'none',   name: '不征税', goldPerPerson: 0,  happiness: 1 },
+      { id: 'light',  name: '轻税',   goldPerPerson: 4,  happiness: 0 },
+      { id: 'normal', name: '常规税', goldPerPerson: 6,  happiness: -1 },
+      { id: 'heavy',  name: '重税',   goldPerPerson: 10, happiness: -3 },
+    ],
+    3: [
+      { id: 'none',   name: '不征税', goldPerPerson: 0,  happiness: 1 },
+      { id: 'light',  name: '轻税',   goldPerPerson: 4,  happiness: 1 },
+      { id: 'normal', name: '常规税', goldPerPerson: 6,  happiness: 0 },
+      { id: 'heavy',  name: '重税',   goldPerPerson: 10, happiness: -2 },
+      { id: 'extreme', name: '重税+', goldPerPerson: 15, happiness: -4 },
+    ],
+  },
+}
+
+export function getTaxTiersByLevel(level) {
+  return TAX_CONFIG.tiersByLevel[level] || []
+}

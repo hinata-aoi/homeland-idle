@@ -6,6 +6,7 @@
       <div class="header-stats">
         <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
           <span>人口：{{ store.totalPopulation }}/{{ store.maxPopulation }}</span>
+          <span>🪙 {{ store.fmt(store.gold) }}</span>
           <span :class="{ warning: store.totalPercent > 80, danger: store.totalPercent >= 99 }">
             📦 {{ store.fmt(store.totalUsed) }}/{{ store.fmt(store.totalCapacity) }}
           </span>

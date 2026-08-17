@@ -10,10 +10,11 @@ import {
   POPULATION_CONFIG, DEMAND_CONFIG, POLICY_CONFIG,
   WAREHOUSE_CONFIG, OFFLINE_CONFIG, UPGRADE_COST_CONFIG,
   HAPPINESS_CONFIG, getHappinessStatus,
-  GUILD_CONFIG, EXPEDITION_MAPS, getExpeditionMap
+  GUILD_CONFIG, EXPEDITION_MAPS, getExpeditionMap,
+  TAX_CONFIG, getTaxTiersByLevel
 } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v7'
+const SAVE_KEY = 'homeland_save_v8'
 
 export const useGameStore = defineStore('game', () => {
   // ==================== 状态 ====================
@@ -60,6 +61,11 @@ export const useGameStore = defineStore('game', () => {
   const expedition = ref(null)                // 当前远征 { mapId, startTime, power, tier, rewards, durationSec } 或 null（唯一队伍）
   const completedMaps = ref([])               // string[] — 全胜（gte100 档）结算过的地图 id，用于解锁下一张
 
+  // 货币/税务系统
+  const gold = ref(0)                         // 金币：独立货币，不占仓库容量、无上限
+  const taxRate = ref('none')                 // 当前征税档位 id（见 TAX_CONFIG.tiersByLevel）
+  const lastTaxCollectTime = ref(Date.now())  // 上次金币结算时间戳（每 30 分钟一轮）
+
   // ==================== 初始化 ====================
 
   function initNewGame() {
@@ -105,6 +111,11 @@ export const useGameStore = defineStore('game', () => {
     // 初始化远征
     expedition.value = null
     completedMaps.value = []
+
+    // 初始化货币/税务
+    gold.value = 0
+    taxRate.value = 'none'
+    lastTaxCollectTime.value = Date.now()
 
     lastSaveTime.value = Date.now()
     checkUnlocks()
@@ -188,7 +199,7 @@ export const useGameStore = defineStore('game', () => {
 
   // ==================== 幸福度系统 ====================
 
-  // 幸福度点数：当前激活事件的点数总和 + 建筑被动加成（常驻，不经过事件检查）
+  // 幸福度点数：当前激活事件的点数总和 + 建筑被动加成 + 税所档位修正（常驻，不经过事件检查）
   const happinessPoints = computed(() => {
     let total = 0
     for (const eventId of activeHappinessEvents.value) {
@@ -198,6 +209,7 @@ export const useGameStore = defineStore('game', () => {
     for (const bonus of HAPPINESS_CONFIG.passiveBonuses || []) {
       if ((buildingLevels.value[bonus.building] || 0) >= bonus.level) total += bonus.points
     }
+    total += taxHappinessModifier.value // 税所档位修正（可为负）
     return total
   })
 
@@ -983,6 +995,45 @@ export const useGameStore = defineStore('game', () => {
     save()
   }
 
+  // ==================== 税所/货币系统 ====================
+
+  // 当前税所等级对应的档位表（税所未解锁 → 空）
+  const taxTiers = computed(() => {
+    const lv = buildingLevels.value.taxOffice || 0
+    return getTaxTiersByLevel(lv)
+  })
+
+  // 当前档位（taxRate 不在档位表时返回 null，安全兜底）
+  const currentTaxTier = computed(() => {
+    return taxTiers.value.find(t => t.id === taxRate.value) || null
+  })
+
+  // 税所档位的常驻幸福度修正（如 不征税 +1、重税 −3）
+  const taxHappinessModifier = computed(() => currentTaxTier.value?.happiness || 0)
+
+  // 切换征税档位：档位必须存在于当前税所等级的档位表；换档重置结算计时（避免切档卡结算）
+  function setTaxRate(tierId) {
+    if (!taxTiers.value.find(t => t.id === tierId)) return false
+    taxRate.value = tierId
+    lastTaxCollectTime.value = Date.now()
+    save()
+    return true
+  }
+
+  // 金币结算：每 30 分钟一轮，按总人口（含空闲）发放；支持多轮累计（离线真实时间补发）
+  function checkTaxCollection() {
+    const tier = currentTaxTier.value
+    const lv = buildingLevels.value.taxOffice || 0
+    if (lv < 1 || !tier || tier.goldPerPerson <= 0) return
+    const intervalMs = TAX_CONFIG.settlementIntervalSec * 1000
+    const elapsed = Date.now() - lastTaxCollectTime.value
+    if (elapsed < intervalMs) return
+    const rounds = Math.floor(elapsed / intervalMs)
+    gold.value += tier.goldPerPerson * totalPopulation.value * rounds
+    lastTaxCollectTime.value += rounds * intervalMs
+    save()
+  }
+
   // ==================== 游戏循环 ====================
 
   let tickInterval = null
@@ -1020,6 +1071,8 @@ export const useGameStore = defineStore('game', () => {
   function tick() {
     // 0. 远征结算：到期自动发奖（真实时间倒计时）
     checkExpeditionCompletion()
+    // 0.5 税务结算：每 30 分钟按人口发放金币（真实时间）
+    checkTaxCollection()
 
     // 幸福度增长修正用：记录本 tick 食物值变化的起点
     const foodBeforeHappiness = foodValue.value
@@ -1217,26 +1270,30 @@ export const useGameStore = defineStore('game', () => {
         happinessEventCheckCounter: happinessEventCheckCounter.value,
         expedition: expedition.value,
         completedMaps: completedMaps.value,
+        gold: gold.value,
+        taxRate: taxRate.value,
+        lastTaxCollectTime: lastTaxCollectTime.value,
         lastSaveTime: lastSaveTime.value,
-        version: 7,
+        version: 8,
       }))
     } catch (e) { /* ignore */ }
   }
 
   function load() {
     try {
-      // 优先读取新版存档，缺失时回退到旧版 v6/v5/v4 存档（自动迁移）
+      // 优先读取新版存档，缺失时回退到旧版 v7/v6/v5/v4 存档（自动迁移）
       let raw = localStorage.getItem(SAVE_KEY)
+      if (!raw) raw = localStorage.getItem('homeland_save_v7')
       if (!raw) raw = localStorage.getItem('homeland_save_v6')
       if (!raw) raw = localStorage.getItem('homeland_save_v5')
       if (!raw) raw = localStorage.getItem('homeland_save_v4')
       if (!raw) return false
-      // 从旧版键读到数据 → 写入新版键，后续 save 以 v7 覆盖
+      // 从旧版键读到数据 → 写入新版键，后续 save 以 v8 覆盖
       if (localStorage.getItem(SAVE_KEY) !== raw) {
         localStorage.setItem(SAVE_KEY, raw)
       }
       const data = JSON.parse(raw)
-      if (data.version !== 4 && data.version !== 5 && data.version !== 6 && data.version !== 7) return false
+      if (data.version !== 4 && data.version !== 5 && data.version !== 6 && data.version !== 7 && data.version !== 8) return false
 
       resources.value = data.resources || {}
       refined.value = data.refined || {}
@@ -1308,6 +1365,10 @@ export const useGameStore = defineStore('game', () => {
       // 迁移：v7 远征状态（旧存档无 → 空闲，未全胜过任何地图）
       expedition.value = data.expedition || null
       completedMaps.value = data.completedMaps || []
+      // 迁移：v8 货币/税务（旧存档无 → 金币 0、不征税）
+      gold.value = data.gold ?? 0
+      taxRate.value = data.taxRate ?? 'none'
+      lastTaxCollectTime.value = data.lastTaxCollectTime || Date.now()
       lastSaveTime.value = data.lastSaveTime || Date.now()
       calculateOffline()
       // 离线模拟可能改变了资源/人口，重新检查事件确保激活状态正确
@@ -1315,6 +1376,8 @@ export const useGameStore = defineStore('game', () => {
       checkUnlocks()
       // 远征为真实时间倒计时：加载时若已超时立即结算（离线期间照常计时）
       checkExpeditionCompletion()
+      // 税务同样按真实时间：加载时补发离线期间的金币
+      checkTaxCollection()
       return true
     } catch (e) {
       return false
@@ -1413,6 +1476,11 @@ export const useGameStore = defineStore('game', () => {
     expeditionMaps, isMapUnlocked, getExpeditionTier,
     startExpedition, cancelExpedition, checkExpeditionCompletion,
     EXPEDITION_MAPS, GUILD_CONFIG,
+    // 税所/货币系统
+    gold, taxRate, lastTaxCollectTime,
+    taxTiers, currentTaxTier, taxHappinessModifier,
+    setTaxRate, checkTaxCollection,
+    TAX_CONFIG, getTaxTiersByLevel,
     // 加工与进化（供测试与调试直接调用）
     processBuildingPerSecond, checkUnlocks, isEvolvedAway,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,

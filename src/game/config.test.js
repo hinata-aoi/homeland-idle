@@ -7,6 +7,7 @@ import {
   getBuilding, getBuildingRecipes, getGrowthNeeded, getHappinessStatus,
   PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS, KEY_BUILDINGS,
   GUILD_CONFIG, EXPEDITION_MAPS,
+  TAX_CONFIG, getTaxTiersByLevel,
 } from './config.js'
 
 describe('getGrowthNeeded 人口增长公式', () => {
@@ -212,5 +213,45 @@ describe('EXPEDITION_MAPS 远征地图表', () => {
     for (let i = 1; i < reqs.length; i++) {
       expect(reqs[i]).toBeGreaterThan(reqs[i - 1])
     }
+  })
+})
+
+describe('TAX_CONFIG 税所档位表', () => {
+  it('税所建筑：市政厅 Lv4 解锁、key 类型、maxLevel 3（无专精）', () => {
+    const taxOffice = getBuilding('taxOffice')
+    expect(taxOffice).toBeTruthy()
+    expect(taxOffice.type).toBe('key')
+    expect(taxOffice.maxLevel).toBe(3)
+    expect(taxOffice.unlockBy).toEqual({ building: 'townhall', level: 4 })
+  })
+
+  it('Lv1 四档：不征税(+1) / 3金币(0) / 5金币(-1) / 9金币(-3)', () => {
+    const tiers = getTaxTiersByLevel(1)
+    expect(tiers.map(t => t.goldPerPerson)).toEqual([0, 3, 5, 9])
+    expect(tiers.map(t => t.happiness)).toEqual([1, 0, -1, -3])
+  })
+
+  it('Lv2 除不征税外金币各 +1', () => {
+    const tiers = getTaxTiersByLevel(2)
+    expect(tiers.map(t => t.goldPerPerson)).toEqual([0, 4, 6, 10])
+    expect(tiers.map(t => t.happiness)).toEqual([1, 0, -1, -3])
+  })
+
+  it('Lv3 除不征税外幸福度各 +1（向正方向），并新增 15 金币/-4 档', () => {
+    const tiers = getTaxTiersByLevel(3)
+    expect(tiers.map(t => t.goldPerPerson)).toEqual([0, 4, 6, 10, 15])
+    expect(tiers.map(t => t.happiness)).toEqual([1, 1, 0, -2, -4])
+  })
+
+  it('每级档位 id 完整且唯一', () => {
+    for (const lv of [1, 2, 3]) {
+      const ids = getTaxTiersByLevel(lv).map(t => t.id)
+      expect(ids[0]).toBe('none')
+      expect(new Set(ids).size).toBe(ids.length)
+    }
+  })
+
+  it('结算周期为 30 分钟', () => {
+    expect(TAX_CONFIG.settlementIntervalSec).toBe(30 * 60)
   })
 })

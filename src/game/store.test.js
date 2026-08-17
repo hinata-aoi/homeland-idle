@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useGameStore } from './store.js'
 import { getGrowthNeeded, POLICY_CONFIG } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v7'
+const SAVE_KEY = 'homeland_save_v8'
 
 let store
 
@@ -473,7 +473,7 @@ describe('存档 save/load 与迁移', () => {
     store.setPolicyRate('wheat', 10)
     store.save()
     const snapshot = JSON.parse(localStorage.getItem(SAVE_KEY))
-    expect(snapshot.version).toBe(7)
+    expect(snapshot.version).toBe(8)
     expect(snapshot.totalPopulation).toBe(4)
     expect(snapshot.populationAssigned.farm).toBe(1)
     expect(snapshot.policyRates.wheat).toBe(10)
@@ -630,8 +630,8 @@ describe('远征系统', () => {
     unlockGuild()
     store.startExpedition('grassland')
     store.save()
-    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v7'))
-    expect(snapshot.version).toBe(7)
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v8'))
+    expect(snapshot.version).toBe(8)
     expect(snapshot.expedition.mapId).toBe('grassland')
     // 重新加载恢复
     store.expedition = null
@@ -693,6 +693,142 @@ describe('远征系统', () => {
     expect(store.load()).toBe(true)
     expect(store.expedition).toBeNull() // 已结算
     expect(store.resources.wood).toBe(30 + 250) // 奖励已发放
+  })
+})
+
+describe('税所/货币系统', () => {
+  function unlockTaxOffice() {
+    store.buildingLevels.townhall = 4
+    store.checkUnlocks()
+  }
+
+  it('市政厅 Lv4 解锁税所，初始金币 0、默认不征税', () => {
+    store.initNewGame()
+    expect(store.buildingLevels.taxOffice).toBe(0)
+    expect(store.gold).toBe(0)
+    expect(store.taxRate).toBe('none')
+    unlockTaxOffice()
+    expect(store.buildingLevels.taxOffice).toBe(1)
+    expect(store.currentTaxTier.name).toBe('不征税')
+  })
+
+  it('不征税档常驻 +1 幸福度；重税档 -3，幸福度点数联动', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    expect(store.taxHappinessModifier).toBe(1) // 不征税
+    expect(store.setTaxRate('heavy')).toBe(true)
+    expect(store.taxHappinessModifier).toBe(-3)
+    // 幸福度点数 = 聚集地被动 1 + 税所修正 -3 = -2
+    expect(store.happinessPoints).toBe(1 - 3)
+  })
+
+  it('无效档位被拒绝；Lv2 金币 +1，Lv3 五档且解锁高档位', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    expect(store.setTaxRate('extreme')).toBe(false) // Lv1 无此档
+    store.buildingLevels.taxOffice = 2
+    expect(store.taxTiers.find(t => t.id === 'light').goldPerPerson).toBe(4)
+    store.buildingLevels.taxOffice = 3
+    expect(store.taxTiers).toHaveLength(5)
+    expect(store.setTaxRate('extreme')).toBe(true) // Lv3 解锁
+    expect(store.taxHappinessModifier).toBe(-4)
+  })
+
+  it('金币结算：每 30 分钟按人口发放一轮，多轮累计', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    store.setTaxRate('light') // 3 金币/人
+    expect(store.gold).toBe(0)
+    store.lastTaxCollectTime = Date.now() - 30 * 60 * 1000 - 1000
+    store.checkTaxCollection()
+    expect(store.gold).toBe(3 * 4) // 4 人 × 1 轮
+    store.lastTaxCollectTime = Date.now() - 90 * 60 * 1000 - 1000
+    store.checkTaxCollection()
+    expect(store.gold).toBe(3 * 4 + 3 * 3 * 4) // 12 + 36 = 48
+  })
+
+  it('不征税档不结算金币', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    store.setTaxRate('none')
+    store.lastTaxCollectTime = Date.now() - 2 * 60 * 60 * 1000
+    store.checkTaxCollection()
+    expect(store.gold).toBe(0)
+  })
+
+  it('换档重置结算计时，避免切档卡结算', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    store.setTaxRate('light')
+    store.lastTaxCollectTime = Date.now() - 30 * 60 * 1000 - 1000
+    store.setTaxRate('normal') // 换档 → 计时重置
+    store.checkTaxCollection()
+    expect(store.gold).toBe(0) // 未满 30 分钟
+  })
+
+  it('金币与税务状态随存档持久化；v7 迁移默认值', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    store.setTaxRate('normal')
+    store.gold = 123
+    store.save()
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v8'))
+    expect(snapshot.version).toBe(8)
+    expect(snapshot.gold).toBe(123)
+    expect(snapshot.taxRate).toBe('normal')
+    // v7 旧存档迁移（先清除 v8，确保走 v7 迁移路径）
+    localStorage.removeItem('homeland_save_v8')
+    localStorage.setItem('homeland_save_v7', JSON.stringify({
+      version: 7,
+      resources: { wheat: 10, wood: 20 },
+      refined: {},
+      buildingLevels: { farm: 1, townhall: 1, settlement: 1 },
+      warehouseLevel: 1,
+      discoveredBuildings: [],
+      totalPopulation: 4,
+      populationAssigned: {},
+      foodValue: 10,
+      policyRates: {},
+      processProgress: {},
+      activeRecipes: {},
+      activeHappinessEvents: [],
+      expedition: null,
+      completedMaps: [],
+      lastSaveTime: Date.now(),
+    }))
+    expect(store.load()).toBe(true)
+    expect(store.gold).toBe(0)
+    expect(store.taxRate).toBe('none')
+  })
+
+  it('加载时补发离线期间的金币（真实时间）', () => {
+    store.initNewGame()
+    unlockTaxOffice()
+    const saveData = {
+      version: 8,
+      resources: { wheat: 50, wood: 30 },
+      refined: {},
+      buildingLevels: { farm: 1, townhall: 4, settlement: 1, taxOffice: 1 },
+      warehouseLevel: 1,
+      discoveredBuildings: [],
+      totalPopulation: 4,
+      populationAssigned: {},
+      foodValue: 10,
+      policyRates: {},
+      processProgress: {},
+      activeRecipes: {},
+      activeHappinessEvents: [],
+      expedition: null,
+      completedMaps: [],
+      gold: 12,
+      taxRate: 'light',
+      lastTaxCollectTime: Date.now() - 60 * 60 * 1000, // 1 小时前（2 轮）
+      lastSaveTime: Date.now(),
+    }
+    localStorage.setItem('homeland_save_v8', JSON.stringify(saveData))
+    expect(store.load()).toBe(true)
+    // 12 + 2 轮 × 3 × 4 人 = 12 + 24 = 36
+    expect(store.gold).toBe(36)
   })
 })
 
