@@ -7,7 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useGameStore } from './store.js'
 import { getGrowthNeeded, POLICY_CONFIG } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v8'
+const SAVE_KEY = 'homeland_save_v9'
 
 let store
 
@@ -484,7 +484,7 @@ describe('存档 save/load 与迁移', () => {
     store.setPolicyRate('wheat', 10)
     store.save()
     const snapshot = JSON.parse(localStorage.getItem(SAVE_KEY))
-    expect(snapshot.version).toBe(8)
+    expect(snapshot.version).toBe(9)
     expect(snapshot.totalPopulation).toBe(4)
     expect(snapshot.populationAssigned.farm).toBe(1)
     expect(snapshot.policyRates.wheat).toBe(10)
@@ -641,8 +641,8 @@ describe('远征系统', () => {
     unlockGuild()
     store.startExpedition('grassland')
     store.save()
-    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v8'))
-    expect(snapshot.version).toBe(8)
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v9'))
+    expect(snapshot.version).toBe(9)
     expect(snapshot.expedition.mapId).toBe('grassland')
     // 重新加载恢复
     store.expedition = null
@@ -783,12 +783,12 @@ describe('税所/货币系统', () => {
     store.setTaxRate('normal')
     store.gold = 123
     store.save()
-    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v8'))
-    expect(snapshot.version).toBe(8)
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v9'))
+    expect(snapshot.version).toBe(9)
     expect(snapshot.gold).toBe(123)
     expect(snapshot.taxRate).toBe('normal')
-    // v7 旧存档迁移（先清除 v8，确保走 v7 迁移路径）
-    localStorage.removeItem('homeland_save_v8')
+    // v7 旧存档迁移（先清除 v9，确保走 v7 迁移路径）
+    localStorage.removeItem('homeland_save_v9')
     localStorage.setItem('homeland_save_v7', JSON.stringify({
       version: 7,
       resources: { wheat: 10, wood: 20 },
@@ -840,6 +840,122 @@ describe('税所/货币系统', () => {
     expect(store.load()).toBe(true)
     // 12 + 2 轮 × 3 × 4 人 = 12 + 24 = 36
     expect(store.gold).toBe(36)
+  })
+})
+
+describe('集市/商人系统', () => {
+  function unlockMarket() {
+    store.buildingLevels.townhall = 4
+    store.checkUnlocks()
+  }
+
+  it('市政厅 Lv4 同时解锁税所与集市，初始额度充足', () => {
+    store.initNewGame()
+    unlockMarket()
+    expect(store.buildingLevels.market).toBe(1)
+    expect(store.buildingLevels.taxOffice).toBe(1)
+    expect(store.marketQuotaUsed).toBe(0)
+    expect(store.marketQuotaRemaining).toBe(1000)
+  })
+
+  it('卖出：资源 → 金币（1×价值），消耗每日额度', () => {
+    store.initNewGame()
+    unlockMarket()
+    store.setResourceAmount('wood', 100)
+    store.gold = 0
+    expect(store.sellResource('wood', 10)).toBe(true) // 木材价值 2 → +20 金币
+    expect(store.gold).toBe(20)
+    expect(store.resources.wood).toBe(90)
+    expect(store.marketQuotaUsed).toBe(20)
+  })
+
+  it('卖出拒绝：库存不足 / 集市未解锁 / 额度不足', () => {
+    store.initNewGame()
+    expect(store.sellResource('wood', 10)).toBe(false) // 未解锁
+    unlockMarket()
+    store.setResourceAmount('wood', 5)
+    expect(store.sellResource('wood', 10)).toBe(false) // 库存不足
+    store.marketQuotaUsed = 1000
+    store.setResourceAmount('wood', 50)
+    expect(store.sellResource('wood', 10)).toBe(false) // 额度不足
+  })
+
+  it('买入：金币 → 资源（ceil(1.5×价值)/份），受容量限制', () => {
+    store.initNewGame()
+    unlockMarket()
+    store.gold = 500
+    // 木材价值 2 → 买入单价 ceil(3) = 3
+    expect(store.buyResource('wood', 10)).toBe(true)
+    expect(store.gold).toBe(470)
+    expect(store.resources.wood).toBe(40) // 初始 30 + 10
+    expect(store.marketQuotaUsed).toBe(30)
+    // 容量满：wood 初始 30，容量 800，继续买到超容量 → 拒绝
+    store.setResourceAmount('wood', 800) // 满仓
+    expect(store.buyResource('wood', 10)).toBe(false)
+    // 金币不足
+    store.gold = 2
+    store.setResourceAmount('wood', 100)
+    expect(store.buyResource('wood', 10)).toBe(false) // 30 > 2
+  })
+
+  it('买入拒绝：集市未解锁时不可交易', () => {
+    store.initNewGame()
+    store.gold = 500
+    expect(store.buyResource('wood', 10)).toBe(false)
+  })
+
+  it('每日额度跨本地 0:00 自动重置', () => {
+    store.initNewGame()
+    unlockMarket()
+    store.setResourceAmount('wood', 100)
+    store.sellResource('wood', 10)
+    expect(store.marketQuotaUsed).toBe(20)
+    // 模拟跨天：额度日期改为昨天
+    const yesterday = new Date(Date.now() - 24 * 3600 * 1000)
+    const mm = String(yesterday.getMonth() + 1).padStart(2, '0')
+    const dd = String(yesterday.getDate()).padStart(2, '0')
+    store.marketQuotaDate = `${yesterday.getFullYear()}-${mm}-${dd}`
+    store.sellResource('wood', 10) // 交易前自动重置
+    expect(store.marketQuotaDate).not.toBe(`${yesterday.getFullYear()}-${mm}-${dd}`)
+    expect(store.marketQuotaUsed).toBe(20) // 已重置后仅本次 20
+    expect(store.marketQuotaRemaining).toBe(1000 - 20)
+  })
+
+  it('集市额度与存档持久化；v8 迁移默认当天', () => {
+    store.initNewGame()
+    unlockMarket()
+    store.setResourceAmount('wood', 100)
+    store.sellResource('wood', 10)
+    store.save()
+    const snapshot = JSON.parse(localStorage.getItem('homeland_save_v9'))
+    expect(snapshot.version).toBe(9)
+    expect(snapshot.marketQuotaUsed).toBe(20)
+    // v8 旧存档迁移
+    localStorage.removeItem('homeland_save_v9')
+    localStorage.setItem('homeland_save_v8', JSON.stringify({
+      version: 8,
+      resources: { wheat: 10, wood: 20 },
+      refined: {},
+      buildingLevels: { farm: 1, townhall: 1, settlement: 1 },
+      warehouseLevel: 1,
+      discoveredBuildings: [],
+      totalPopulation: 4,
+      populationAssigned: {},
+      foodValue: 10,
+      policyRates: {},
+      processProgress: {},
+      activeRecipes: {},
+      activeHappinessEvents: [],
+      expedition: null,
+      completedMaps: [],
+      gold: 0,
+      taxRate: 'none',
+      lastTaxCollectTime: Date.now(),
+      lastSaveTime: Date.now(),
+    }))
+    expect(store.load()).toBe(true)
+    expect(store.marketQuotaUsed).toBe(0)
+    expect(store.marketQuotaDate).toBeTruthy() // 已重置为当天
   })
 })
 

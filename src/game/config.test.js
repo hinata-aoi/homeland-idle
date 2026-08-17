@@ -8,6 +8,7 @@ import {
   PRODUCTION_BUILDINGS, PROCESSING_BUILDINGS, KEY_BUILDINGS,
   GUILD_CONFIG, EXPEDITION_MAPS,
   TAX_CONFIG, getTaxTiersByLevel,
+  RESOURCE_VALUES, getResourceValue, MARKET_CONFIG,
 } from './config.js'
 
 describe('getGrowthNeeded 人口增长公式', () => {
@@ -253,5 +254,43 @@ describe('TAX_CONFIG 税所档位表', () => {
 
   it('结算周期为 30 分钟', () => {
     expect(TAX_CONFIG.settlementIntervalSec).toBe(30 * 60)
+  })
+})
+
+describe('RESOURCE_VALUES 资源价值表', () => {
+  it('所有现有资源都在价值表中（新增资源必须补表）', () => {
+    for (const key of Object.keys(ALL_RESOURCES)) {
+      expect(RESOURCE_VALUES[key], `资源 ${key} 缺少价值条目`).toBeGreaterThan(0)
+    }
+  })
+
+  it('价值为正整数，基础资源低价、精炼资源高价', () => {
+    for (const v of Object.values(RESOURCE_VALUES)) {
+      expect(Number.isInteger(v)).toBe(true)
+      expect(v).toBeGreaterThan(0)
+    }
+    // 精炼资源整体高于基础资源（抽查关键项）
+    expect(RESOURCE_VALUES.wheat).toBeLessThan(RESOURCE_VALUES.plank)
+    expect(RESOURCE_VALUES.wood).toBeLessThan(RESOURCE_VALUES.plank)
+    expect(RESOURCE_VALUES.wine).toBeGreaterThan(RESOURCE_VALUES.wheat)
+  })
+
+  it('getResourceValue 对未知资源兜底为 1（新资源未补表时不崩溃）', () => {
+    expect(getResourceValue('wheat')).toBe(RESOURCE_VALUES.wheat)
+    expect(getResourceValue('future_resource')).toBe(1)
+  })
+
+  it('集市建筑：市政厅 Lv4 解锁、key 类型、maxLevel 1（不可升级）', () => {
+    const market = getBuilding('market')
+    expect(market).toBeTruthy()
+    expect(market.type).toBe('key')
+    expect(market.maxLevel).toBe(1)
+    expect(market.unlockBy).toEqual({ building: 'townhall', level: 4 })
+  })
+
+  it('MARKET_CONFIG：买入溢价 1.5、每日额度正数', () => {
+    expect(MARKET_CONFIG.buyMarkup).toBe(1.5)
+    expect(MARKET_CONFIG.dailyQuotaGold).toBeGreaterThan(0)
+    expect(MARKET_CONFIG.tradeAmounts).toContain(1)
   })
 })

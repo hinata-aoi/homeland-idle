@@ -9,6 +9,7 @@ import ProductionPanel from './ProductionPanel.vue'
 import UpgradeModal from './UpgradeModal.vue'
 import EvolutionModal from './EvolutionModal.vue'
 import ExpeditionPanel from './ExpeditionPanel.vue'
+import MarketPanel from './MarketPanel.vue'
 import PolicyPanel from './PolicyPanel.vue'
 
 let pinia
@@ -161,5 +162,33 @@ describe('PolicyPanel 税务 Tab', () => {
     await heavyBtn.trigger('click')
     expect(store.taxRate).toBe('heavy')
     expect(w.text()).toContain('幸福度 -3')
+  })
+})
+
+describe('MarketPanel 交易面板', () => {
+  it('集市解锁后显示资源列表与买卖按钮', async () => {
+    store.buildingLevels.townhall = 4
+    store.checkUnlocks()
+    store.setResourceAmount('wood', 100)
+    const w = mountWithPinia(MarketPanel)
+    expect(w.text()).toContain('今日剩余额度')
+    expect(w.text()).toContain('小麦')
+    // 定位木材行，默认数量 1：卖出 1 木材（价值 2）→ 金币 +2
+    const woodRow = w.findAll('.resource-row').find(row => row.text().includes('木材'))
+    const sellBtn = woodRow.findAll('button').find(b => b.text() === '卖出 1')
+    expect(sellBtn).toBeTruthy()
+    await sellBtn.trigger('click')
+    expect(store.gold).toBe(2)
+    expect(store.resources.wood).toBe(99)
+    expect(store.marketQuotaUsed).toBe(2)
+  })
+
+  it('金币不足时买入按钮禁用', () => {
+    store.buildingLevels.townhall = 4
+    store.checkUnlocks()
+    store.gold = 0
+    const w = mountWithPinia(MarketPanel)
+    const buyBtn = w.findAll('button').find(b => b.text() === '买入 1')
+    expect(buyBtn.attributes('disabled')).toBeDefined()
   })
 })

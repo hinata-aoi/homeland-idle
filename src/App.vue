@@ -27,6 +27,7 @@
         </button>
         <button :class="{ active: tab === 'key' }" @click="tab = 'key'">🔑<br>关键</button>
         <button :class="{ active: tab === 'expedition' }" @click="tab = 'expedition'">⚔️<br>远征</button>
+        <button v-if="store.buildingLevels.market >= 1" :class="{ active: tab === 'market' }" @click="tab = 'market'">🛒<br>交易</button>
         <button :class="{ active: tab === 'population' }" @click="tab = 'population'">👥<br>人口</button>
         <button :class="{ active: tab === 'policy' }" @click="tab = 'policy'">📜<br>政策</button>
         <button :class="{ active: tab === 'warehouse' }" @click="tab = 'warehouse'">📦<br>仓库</button>
@@ -38,6 +39,7 @@
         <ProcessingPanel v-if="tab === 'processing'" />
         <KeyPanel v-if="tab === 'key'" />
         <ExpeditionPanel v-if="tab === 'expedition'" />
+        <MarketPanel v-if="tab === 'market' && store.buildingLevels.market >= 1" />
         <PopulationPanel v-if="tab === 'population'" />
         <PolicyPanel v-if="tab === 'policy'" />
         <WarehousePanel v-if="tab === 'warehouse'" />
@@ -58,6 +60,7 @@ import ProcessingPanel from './components/ProcessingPanel.vue'
 import PopulationPanel from './components/PopulationPanel.vue'
 import KeyPanel from './components/KeyPanel.vue'
 import ExpeditionPanel from './components/ExpeditionPanel.vue'
+import MarketPanel from './components/MarketPanel.vue'
 import PolicyPanel from './components/PolicyPanel.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'

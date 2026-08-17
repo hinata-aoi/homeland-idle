@@ -31,22 +31,28 @@
       </div>
 
       <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;">
-        <span v-if="b.maxLevel && b.level >= b.maxLevel" style="font-size:0.78em;color:var(--text-dim);">
-          已达 Lv{{ b.maxLevel }} 上限
-        </span>
-        <span v-else style="font-size:0.78em;color:var(--text-dim);">
-          升级消耗 {{ b.upgradeCost.primary.amount }} {{ resName(b.upgradeCost.primary.resource) }}
-          <template v-if="b.upgradeCost.secondary">
-            + {{ b.upgradeCost.secondary.amount }} {{ resName(b.upgradeCost.secondary.resource) }}
-          </template>
-        </span>
-        <button v-if="b.maxLevel && b.level >= b.maxLevel"
-          class="upgrade-btn" disabled style="background:#555;color:#999;">已满级</button>
-        <button v-else class="upgrade-btn"
-          :disabled="!canAfford(b.upgradeCost)"
-          @click="store.openUpgradePreview(b.id)">
-          升级
-        </button>
+        <!-- 不可升级建筑（maxLevel 1，如集市）：不显示升级区 -->
+        <template v-if="b.maxLevel && b.maxLevel === 1">
+          <span style="font-size:0.78em;color:var(--text-dim);">此建筑无需升级</span>
+        </template>
+        <template v-else>
+          <span v-if="b.maxLevel && b.level >= b.maxLevel" style="font-size:0.78em;color:var(--text-dim);">
+            已达 Lv{{ b.maxLevel }} 上限
+          </span>
+          <span v-else style="font-size:0.78em;color:var(--text-dim);">
+            升级消耗 {{ b.upgradeCost.primary.amount }} {{ resName(b.upgradeCost.primary.resource) }}
+            <template v-if="b.upgradeCost.secondary">
+              + {{ b.upgradeCost.secondary.amount }} {{ resName(b.upgradeCost.secondary.resource) }}
+            </template>
+          </span>
+          <button v-if="b.maxLevel && b.level >= b.maxLevel"
+            class="upgrade-btn" disabled style="background:#555;color:#999;">已满级</button>
+          <button v-else class="upgrade-btn"
+            :disabled="!canAfford(b.upgradeCost)"
+            @click="store.openUpgradePreview(b.id)">
+            升级
+          </button>
+        </template>
       </div>
     </div>
 

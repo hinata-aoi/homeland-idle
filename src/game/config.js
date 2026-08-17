@@ -773,7 +773,7 @@ export const BUILDINGS = [
     milestones: {
       2: { desc: '解锁加工建筑 + 采石场 + 深山 + 诊所', unlockBuildings: ['sawmill', 'mason', 'mill', 'quarry', 'deepMountain', 'clinic'] },
       3: { desc: '解锁狩猎场 + 制皮坊 + 公会', unlockBuildings: ['hunting', 'tannery', 'guild'] },
-      4: { desc: '解锁税所', unlockBuildings: ['taxOffice'] },
+      4: { desc: '解锁税所 + 集市', unlockBuildings: ['taxOffice', 'market'] },
     }
   },
   {
@@ -830,6 +830,21 @@ export const BUILDINGS = [
       2: { desc: '除不征税外，各征税档位金币 +1/人' },
       3: { desc: '除不征税外，各档位幸福度 +1；新增高档位 15 金币/人（幸福度 -4）' },
     }
+  },
+
+  // 集市：市政厅Lv4解锁（key），资源与金币互兑（价值表见 RESOURCE_VALUES），每日额度 0:00 刷新
+  // 上限 Lv1：不可升级
+  {
+    id: 'market',
+    type: 'key',
+    name: '集市',
+    icon: '🛒',
+    description: '资源与金币互兑，每日交易额度 0:00 刷新',
+    baseCost: 200,
+    costMultiplier: 2.0,
+    costResource: 'wood',
+    maxLevel: 1,          // 集市上限 Lv1（不可升级）
+    unlockBy: { building: 'townhall', level: 4 },
   },
 ]
 
@@ -1100,4 +1115,31 @@ export const TAX_CONFIG = {
 
 export function getTaxTiersByLevel(level) {
   return TAX_CONFIG.tiersByLevel[level] || []
+}
+
+// ========================
+// 集市/商人系统配置
+// ========================
+
+// 资源基础价值表（金币）：
+// 卖出 1 份资源 = 1×价值 金币；买入 1 份资源 = ceil(价值 × buyMarkup) 金币（溢价买入，无法套利）
+// 新增资源时必须在此补充价值；运行时缺失会兜底为 1（getResourceValue），并由测试提醒补表
+export const RESOURCE_VALUES = {
+  // 基础资源
+  wheat: 1, stone: 3, wood: 2, hide: 4, fish: 3,
+  freshWater: 2, rice: 2, herb: 5, treeFruit: 3, milk: 4, meat: 5,
+  // 精炼资源
+  plank: 8, brick: 10, leather: 12, bread: 10, wine: 15,
+  simpleMedicine: 15, flour: 12, resin: 12, marble: 15, fur: 14,
+  fiber: 10, bandage: 16,
+}
+
+export function getResourceValue(resource) {
+  return RESOURCE_VALUES[resource] ?? 1
+}
+
+export const MARKET_CONFIG = {
+  buyMarkup: 1.5,       // 买入溢价系数（金币 → 资源）
+  dailyQuotaGold: 1000, // 每日总交易额度（金币；卖出所得与买入花费均计入，买卖合计）
+  tradeAmounts: [1, 10, 100], // UI 每次交易数量选项
 }

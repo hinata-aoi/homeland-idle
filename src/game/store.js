@@ -11,10 +11,11 @@ import {
   WAREHOUSE_CONFIG, OFFLINE_CONFIG, UPGRADE_COST_CONFIG,
   HAPPINESS_CONFIG, getHappinessStatus,
   GUILD_CONFIG, EXPEDITION_MAPS, getExpeditionMap,
-  TAX_CONFIG, getTaxTiersByLevel
+  TAX_CONFIG, getTaxTiersByLevel,
+  RESOURCE_VALUES, getResourceValue, MARKET_CONFIG
 } from './config.js'
 
-const SAVE_KEY = 'homeland_save_v8'
+const SAVE_KEY = 'homeland_save_v9'
 
 export const useGameStore = defineStore('game', () => {
   // ==================== 状态 ====================
@@ -66,6 +67,10 @@ export const useGameStore = defineStore('game', () => {
   const taxRate = ref('none')                 // 当前征税档位 id（见 TAX_CONFIG.tiersByLevel）
   const lastTaxCollectTime = ref(Date.now())  // 上次金币结算时间戳（每 30 分钟一轮）
 
+  // 集市/商人系统
+  const marketQuotaDate = ref('')             // 已结算额度的本地日期（YYYY-MM-DD），跨 0:00 自动重置
+  const marketQuotaUsed = ref(0)              // 今日已用交易额度（金币，买卖合计）
+
   // ==================== 初始化 ====================
 
   function initNewGame() {
@@ -116,6 +121,10 @@ export const useGameStore = defineStore('game', () => {
     gold.value = 0
     taxRate.value = 'none'
     lastTaxCollectTime.value = Date.now()
+
+    // 初始化集市额度（当天生效）
+    marketQuotaDate.value = localDateString()
+    marketQuotaUsed.value = 0
 
     lastSaveTime.value = Date.now()
     checkUnlocks()
@@ -1034,6 +1043,84 @@ export const useGameStore = defineStore('game', () => {
     save()
   }
 
+  // ==================== 集市/商人系统 ====================
+
+  // 本地日期（YYYY-MM-DD），用于每日额度跨 0:00 刷新
+  function localDateString() {
+    const d = new Date()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${d.getFullYear()}-${mm}-${dd}`
+  }
+
+  // 跨天时重置今日额度（tick 与交易前调用）
+  function ensureMarketQuota() {
+    const today = localDateString()
+    if (marketQuotaDate.value !== today) {
+      marketQuotaDate.value = today
+      marketQuotaUsed.value = 0
+    }
+  }
+
+  // 今日剩余交易额度
+  const marketQuotaRemaining = computed(() => {
+    ensureMarketQuota()
+    return Math.max(0, MARKET_CONFIG.dailyQuotaGold - marketQuotaUsed.value)
+  })
+
+  // 扣除库存中的资源（兼容基础/精炼），返回是否成功
+  function subtractResource(key, amount) {
+    if (resources.value[key] !== undefined) {
+      if (resources.value[key] < amount) return false
+      resources.value[key] -= amount
+      return true
+    }
+    if (refined.value[key] !== undefined) {
+      if (refined.value[key] < amount) return false
+      refined.value[key] -= amount
+      return true
+    }
+    return false
+  }
+
+  // 卖出：资源 → 金币（1×价值），计入每日额度
+  function sellResource(resource, qty) {
+    const lv = buildingLevels.value.market || 0
+    if (lv < 1 || qty <= 0) return false
+    ensureMarketQuota()
+    const value = getResourceValue(resource)
+    const goldGain = value * qty
+    if (goldGain <= 0 || marketQuotaUsed.value + goldGain > MARKET_CONFIG.dailyQuotaGold) return false
+    if (!subtractResource(resource, qty)) return false
+    gold.value += goldGain
+    marketQuotaUsed.value += goldGain
+    save()
+    return true
+  }
+
+  // 买入：金币 → 资源（ceil(价值×1.5) 溢价/份），受仓库容量与每日额度限制
+  function buyResource(resource, qty) {
+    const lv = buildingLevels.value.market || 0
+    if (lv < 1 || qty <= 0) return false
+    ensureMarketQuota()
+    const unitCost = Math.ceil(getResourceValue(resource) * MARKET_CONFIG.buyMarkup)
+    const totalCost = unitCost * qty
+    if (totalCost <= 0 || marketQuotaUsed.value + totalCost > MARKET_CONFIG.dailyQuotaGold) return false
+    if (gold.value < totalCost) return false
+    // 容量检查：容量足够才允许整批买入
+    const cap = getResourceCap(resource)
+    const current = getResourceAmount(resource)
+    if (current + qty > cap) return false
+    // 扣金币、加资源
+    gold.value -= totalCost
+    if (resources.value[resource] !== undefined) resources.value[resource] = current + qty
+    else if (refined.value[resource] !== undefined) refined.value[resource] = current + qty
+    else return false // 未知资源（理论不可达）
+    marketQuotaUsed.value += totalCost
+    save()
+    return true
+  }
+
   // ==================== 游戏循环 ====================
 
   let tickInterval = null
@@ -1073,6 +1160,8 @@ export const useGameStore = defineStore('game', () => {
     checkExpeditionCompletion()
     // 0.5 税务结算：每 30 分钟按人口发放金币（真实时间）
     checkTaxCollection()
+    // 0.7 集市额度：跨本地 0:00 自动重置
+    ensureMarketQuota()
 
     // 幸福度增长修正用：记录本 tick 食物值变化的起点
     const foodBeforeHappiness = foodValue.value
@@ -1273,27 +1362,30 @@ export const useGameStore = defineStore('game', () => {
         gold: gold.value,
         taxRate: taxRate.value,
         lastTaxCollectTime: lastTaxCollectTime.value,
+        marketQuotaDate: marketQuotaDate.value,
+        marketQuotaUsed: marketQuotaUsed.value,
         lastSaveTime: lastSaveTime.value,
-        version: 8,
+        version: 9,
       }))
     } catch (e) { /* ignore */ }
   }
 
   function load() {
     try {
-      // 优先读取新版存档，缺失时回退到旧版 v7/v6/v5/v4 存档（自动迁移）
+      // 优先读取新版存档，缺失时回退到旧版 v8/v7/v6/v5/v4 存档（自动迁移）
       let raw = localStorage.getItem(SAVE_KEY)
+      if (!raw) raw = localStorage.getItem('homeland_save_v8')
       if (!raw) raw = localStorage.getItem('homeland_save_v7')
       if (!raw) raw = localStorage.getItem('homeland_save_v6')
       if (!raw) raw = localStorage.getItem('homeland_save_v5')
       if (!raw) raw = localStorage.getItem('homeland_save_v4')
       if (!raw) return false
-      // 从旧版键读到数据 → 写入新版键，后续 save 以 v8 覆盖
+      // 从旧版键读到数据 → 写入新版键，后续 save 以 v9 覆盖
       if (localStorage.getItem(SAVE_KEY) !== raw) {
         localStorage.setItem(SAVE_KEY, raw)
       }
       const data = JSON.parse(raw)
-      if (data.version !== 4 && data.version !== 5 && data.version !== 6 && data.version !== 7 && data.version !== 8) return false
+      if (data.version !== 4 && data.version !== 5 && data.version !== 6 && data.version !== 7 && data.version !== 8 && data.version !== 9) return false
 
       resources.value = data.resources || {}
       refined.value = data.refined || {}
@@ -1369,6 +1461,10 @@ export const useGameStore = defineStore('game', () => {
       gold.value = data.gold ?? 0
       taxRate.value = data.taxRate ?? 'none'
       lastTaxCollectTime.value = data.lastTaxCollectTime || Date.now()
+      // 迁移：v9 集市额度（旧存档无 → 从当天开始、未使用）
+      marketQuotaDate.value = data.marketQuotaDate || ''
+      marketQuotaUsed.value = data.marketQuotaUsed || 0
+      ensureMarketQuota()
       lastSaveTime.value = data.lastSaveTime || Date.now()
       calculateOffline()
       // 离线模拟可能改变了资源/人口，重新检查事件确保激活状态正确
@@ -1481,6 +1577,10 @@ export const useGameStore = defineStore('game', () => {
     taxTiers, currentTaxTier, taxHappinessModifier,
     setTaxRate, checkTaxCollection,
     TAX_CONFIG, getTaxTiersByLevel,
+    // 集市/商人系统
+    marketQuotaDate, marketQuotaUsed, marketQuotaRemaining,
+    sellResource, buyResource,
+    RESOURCE_VALUES, getResourceValue, MARKET_CONFIG,
     // 加工与进化（供测试与调试直接调用）
     processBuildingPerSecond, checkUnlocks, isEvolvedAway,
     startTick, stopTick, tick, calculateOffline, dismissOfflineModal,
