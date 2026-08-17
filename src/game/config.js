@@ -51,7 +51,6 @@ export const POPULATION_CONFIG = {
 
 export const DEMAND_CONFIG = {
   foodValuePerPersonPerSec: 2,    // 每人每秒消耗食物值
-  offlineConsumptionRate: 0.5,    // 离线消耗速率倍率
 }
 
 // ========================

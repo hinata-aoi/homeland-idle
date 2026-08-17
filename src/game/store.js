@@ -1191,8 +1191,8 @@ export const useGameStore = defineStore('game', () => {
     // 离线被动食物产出（市政厅等）
     foodValue.value += passiveFoodPerSec.value * cappedElapsed
 
-    // 离线食物值消耗（50%速率）
-    const offlineConsumption = totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec * cappedElapsed * DEMAND_CONFIG.offlineConsumptionRate
+    // 离线食物值消耗（与在线一致，每人 2/s；最低为 0 不扣负）
+    const offlineConsumption = totalPopulation.value * DEMAND_CONFIG.foodValuePerPersonPerSec * cappedElapsed
     foodValue.value -= offlineConsumption
     // 食物值最低为0，不会变成负数（人口不再饿死）
     if (foodValue.value < 0) foodValue.value = 0

@@ -369,7 +369,7 @@ describe('政策转化', () => {
 })
 
 describe('calculateOffline 离线计算', () => {
-  it('离线 100 秒：全额生产（含幸福度倍率）、50% 消耗、弹窗展示收益', () => {
+  it('离线 100 秒：全额生产（含幸福度倍率）、消耗与在线一致、弹窗展示收益', () => {
     store.initNewGame()
     store.lastSaveTime = Date.now() - 100 * 1000
     store.assignPop('farm')
@@ -378,8 +378,19 @@ describe('calculateOffline 离线计算', () => {
     expect(store.resources.wheat).toBeCloseTo(335, 5)
     expect(store.offlineEarnings.wheat).toBeCloseTo(285, 5)
     expect(store.showOfflineModal).toBe(true)
-    // 食物值：110 + 2×100 − 4×2×100×0.5 = 110+200−400 → 0
+    // 食物值：110 + 2×100 − 4×2×100 = 110+200−800 → 最低 0
     expect(store.foodValue).toBe(0)
+  })
+
+  it('离线食物值消耗与在线一致（每人 2/s，不再减半）', () => {
+    store.initNewGame()
+    store.foodValue = 1000 // 抬高初始值以观察精确消耗
+    store.lastSaveTime = Date.now() - 100 * 1000
+    store.calculateOffline()
+    // 1000 + 被动 2×100 − 消耗 4×2×100 = 400 → 触发一次人口增长(4→5, 需求 220.98) → 179.02
+    // 若仍减半（消耗 400）结果会是 800→连续增长到 6 人→304.02，人口 6，可区分
+    expect(store.foodValue).toBeCloseTo(1000 + 200 - 4 * 2 * 100 - getGrowthNeeded(4), 5)
+    expect(store.totalPopulation).toBe(5)
   })
 
   it('离线时长不足 10 秒时直接跳过', () => {
