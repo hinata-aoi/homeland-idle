@@ -1,3 +1,9 @@
+/* =====================================================================
+   《家园》中世纪奇幻田园风主题 —— 暖木 + 烛光金
+   仅样式层：不改变任何玩法逻辑 / 存档结构，变量名与旧版保持一致，
+   以便各面板内联样式与 scoped 样式继续生效。
+   ===================================================================== */
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -5,28 +11,52 @@
 }
 
 :root {
-  --bg: #1e2940;
-  --bg-end: #1a2335;
-  --panel: #1b2743;
-  --accent: #e2a03f;
-  --text: #e0e0e0;
-  --text-dim: #8888aa;
-  --green: #4caf84;
-  --red: #e05555;
-  --blue: #5b9bd5;
-  --border: #2a2a4a;
-  --radius: 8px;
+  /* 主色：暖胡桃木 */
+  --bg: #2a1e13;
+  --bg-end: #171009;
+  /* 卡片：羊皮纸 / 木纹暖调 */
+  --panel: #2e2316;
+  --panel-2: #3a2c1b;          /* 面板上部提亮 */
+  --panel-dark: #22180d;       /* 面板下部压暗 */
+  /* 强调：古金 */
+  --accent: #d6a452;
+  --accent-hi: #f2ce84;
+  --accent-dim: #8a6a34;
+  /* 文字：暖象牙 */
+  --text: #ece2cb;
+  --text-dim: #b5a584;
+  /* 状态色（暖化） */
+  --green: #8fae6b;
+  --red: #d26152;
+  --blue: #7a9cc0;
+  /* 边框 / 分隔 */
+  --border: #4a3a24;
+  --border-hi: rgba(255, 222, 168, 0.20);
+  --radius: 6px;
+  /* 字体：标题用古典衬线 */
+  --font-title: Georgia, "Times New Roman", "Songti SC", "STSong", "SimSun", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  /* 阴影 */
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
 
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-  background: linear-gradient(160deg, var(--bg) 0%, var(--bg-end) 100%);
-  background-attachment: fixed;
+  font-family: var(--font-body);
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 17px;
+  line-height: 1.55;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* 背景：暮色暖棕渐变 + 顶部烛光辉光 + 四周暗角 */
+body {
+  background:
+    radial-gradient(130% 90% at 50% -5%, rgba(255, 196, 118, 0.12), transparent 55%),
+    radial-gradient(120% 120% at 50% 125%, rgba(0, 0, 0, 0.55), transparent 60%),
+    linear-gradient(160deg, var(--bg) 0%, var(--bg-end) 100%);
+  background-attachment: fixed;
 }
 
 #app {
@@ -36,62 +66,112 @@ html, body {
   padding: 12px;
 }
 
+/* ---------------- 按钮底座（默认木刻质感） ---------------- */
 button {
   font-family: inherit;
   cursor: pointer;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 8px 16px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  transition: all 0.15s;
+  color: var(--text);
+  background: linear-gradient(180deg, var(--panel-2), var(--panel-dark));
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.10), 0 2px 5px rgba(0, 0, 0, 0.30);
+  transition: transform 0.12s, box-shadow 0.12s, filter 0.12s;
+}
+
+button:hover {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.12), 0 4px 10px rgba(0, 0, 0, 0.40);
 }
 
 button:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
+  filter: brightness(0.98);
 }
 
 button:disabled {
-  opacity: 0.45;
+  opacity: 0.42;
   cursor: not-allowed;
+  filter: none;
+  transform: none;
+  box-shadow: none;
 }
 
+/* ---------------- 面板卡片（羊皮纸 / 木纹质感） ---------------- */
 .panel {
-  background: var(--panel);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 232, 190, 0.06), rgba(0, 0, 0, 0.05)),
+    linear-gradient(180deg, var(--panel-2), var(--panel-dark));
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 232, 190, 0.10),
+    0 4px 12px rgba(0, 0, 0, 0.35);
+  padding: 16px;
+  margin-bottom: 12px;
+  animation: panelIn 0.25s ease;
+}
+
+/* 卡片顶部金色细纹（烛光描边） */
+.panel::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 12px; right: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-dim), transparent);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 .panel h2 {
-  font-size: 1em;
+  font-size: 1.1em;
+  font-family: var(--font-title);
+  letter-spacing: 0.5px;
   color: var(--accent);
-  margin-bottom: 10px;
-  padding-bottom: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
+.panel h3 {
+  font-family: var(--font-title);
+  color: var(--accent);
+  letter-spacing: 0.4px;
+}
+
+/* ---------------- 资源行 / 数字 ---------------- */
 .resource-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: 8px 0;
 }
 
 .resource-row + .resource-row {
-  border-top: 1px solid rgba(255,255,255,0.04);
+  border-top: 1px solid rgba(255, 226, 170, 0.07);
 }
 
 .resource-icon {
-  font-size: 1.2em;
-  width: 28px;
+  font-size: 1.3em;
+  width: 32px;
   text-align: center;
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.5));
 }
 
 .resource-name {
   flex: 1;
-  font-size: 0.95em;
+  font-size: 1em;
 }
 
 .resource-amount {
@@ -109,18 +189,36 @@ button:disabled {
   text-align: right;
 }
 
+/* ---------------- 按钮变体 ---------------- */
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.8em;
+  border-radius: 4px;
+}
+
+/* 主升级按钮：古金 */
 .upgrade-btn {
-  background: var(--accent);
-  color: #1a1a2e;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent) 55%, #b4842f);
+  color: #2a1a08;
+  border: 1px solid #edc170;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
   padding: 4px 12px;
   font-size: 0.82em;
   border-radius: 4px;
   white-space: nowrap;
 }
 
+.upgrade-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 4px 12px rgba(0,0,0,0.4);
+}
+
 .upgrade-btn:disabled {
-  background: #555;
-  color: #999;
+  background: #4a3a28;
+  color: #9c8f76;
+  border-color: var(--border);
+  text-shadow: none;
   cursor: not-allowed;
 }
 
@@ -128,37 +226,104 @@ button:disabled {
   transform: none;
 }
 
-.btn-sm {
-  padding: 4px 10px;
-  font-size: 0.8em;
-  border-radius: 4px;
-}
-
-.recipe-active {
-  background: var(--accent);
-  color: #1a1a2e;
-  font-weight: 600;
-}
-
+/* 彩色按钮 */
 .btn-green {
-  background: var(--green);
-  color: #fff;
+  background: linear-gradient(180deg, #a8c084, var(--green));
+  color: #16220c;
+  border-color: #b7cd95;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
 }
 
 .btn-red {
-  background: var(--red);
+  background: linear-gradient(180deg, #dd7a6b, var(--red));
   color: #fff;
+  border-color: #e08a7c;
 }
 
 .btn-blue {
-  background: var(--blue);
-  color: #fff;
+  background: linear-gradient(180deg, #9ab6d6, var(--blue));
+  color: #10202f;
+  border-color: #b3cdea;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
 }
 
+/* 已激活 / 选中（木头高亮成金） */
+.recipe-active {
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: #2a1a08;
+  border-color: #edc170;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+}
+
+/* 专精进化（金色描边） */
+.evolve-btn {
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  border: 1px solid #ffd87a;
+  color: #2a1a08;
+  font-weight: 700;
+}
+
+/* 回退按钮（灰木小按钮） */
+.revert-btn {
+  background: linear-gradient(180deg, #4a3d2c, #382d1e);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+/* 集市卖出 / 买入 */
+.sell-btn { background: linear-gradient(180deg, #a8c084, var(--green)); color: #16220c; border-color: #b7cd95; }
+.buy-btn  { background: linear-gradient(180deg, var(--accent-hi), var(--accent)); color: #2a1a08; border-color: #edc170; }
+
+/* 徽章 */
+.milestone-badge {
+  display: inline-block;
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent));
+  color: #2a1a08;
+  font-size: 0.7em;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.tag {
+  display: inline-block;
+  font-size: 0.72em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+  background: rgba(255, 226, 170, 0.10);
+  border: 1px solid rgba(255, 226, 170, 0.15);
+  color: var(--text-dim);
+}
+
+/* ---------------- 进度条（金色流光） ---------------- */
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  margin-top: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent-hi));
+  border-radius: 4px;
+  transition: width 0.3s;
+  box-shadow: 0 0 6px rgba(214, 164, 82, 0.55);
+}
+
+/* ---------------- 弹窗（纹章饰框） ---------------- */
 .modal-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.7);
+  background: rgba(12, 7, 2, 0.72);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,18 +332,30 @@ button:disabled {
 }
 
 .modal {
-  background: var(--panel);
-  border: 1px solid var(--accent);
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 232, 190, 0.06), rgba(0, 0, 0, 0.04)),
+    linear-gradient(180deg, #3a2c1a, #261b0e);
+  border: 1px solid var(--accent-dim);
   border-radius: var(--radius);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 6px 18px rgba(0, 0, 0, 0.16),
+    0 18px 48px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 232, 190, 0.14);
   padding: 24px;
   max-width: 400px;
   width: 100%;
   text-align: center;
+  animation: panelIn 0.2s ease;
 }
 
 .modal h2 {
   color: var(--accent);
+  font-family: var(--font-title);
+  letter-spacing: 0.5px;
   margin-bottom: 16px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .modal p {
@@ -193,58 +370,6 @@ button:disabled {
   margin: 12px 0;
 }
 
-.progress-bar {
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  margin-top: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.milestone-badge {
-  display: inline-block;
-  background: var(--accent);
-  color: #1a1a2e;
-  font-size: 0.7em;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-left: 6px;
-  vertical-align: middle;
-}
-
-.tag {
-  display: inline-block;
-  font-size: 0.72em;
-  padding: 1px 6px;
-  border-radius: 3px;
-  margin-right: 4px;
-  background: var(--border);
-  color: var(--text-dim);
-}
-
-/* 专精进化按钮（金色描边，区别于普通升级） */
-.evolve-btn {
-  background: var(--accent);
-  border: 1px solid #ffd700;
-  color: #1a1a2e;
-  font-weight: 600;
-}
-
-/* 回退按钮（灰色小按钮） */
-.revert-btn {
-  background: #444;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-}
-
 /* 进化选择卡片 */
 .evolve-card {
   flex: 1;
@@ -253,7 +378,7 @@ button:disabled {
   flex-direction: column;
 }
 
-/* 主布局：左侧标签栏 + 右侧内容区 */
+/* ---------------- 主布局：左侧标签 + 右侧内容 ---------------- */
 .main-layout {
   display: flex;
   gap: 8px;
@@ -262,10 +387,10 @@ button:disabled {
 
 .content-area {
   flex: 1;
-  min-width: 0;  /* 防止 flex 子项溢出 */
+  min-width: 0;
 }
 
-/* 左侧垂直标签栏 */
+/* 左侧垂直标签栏（木牌） */
 .tab-bar {
   display: flex;
   flex-direction: column;
@@ -275,7 +400,7 @@ button:disabled {
 }
 
 .tab-bar button {
-  background: var(--panel);
+  background: linear-gradient(180deg, var(--panel-2), #20170d);
   color: var(--text-dim);
   border: 1px solid var(--border);
   padding: 10px 6px;
@@ -283,15 +408,23 @@ button:disabled {
   text-align: center;
   line-height: 1.3;
   border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 rgba(255, 226, 170, 0.08), 0 2px 5px rgba(0,0,0,0.3);
+}
+
+.tab-bar button:hover {
+  color: var(--text);
 }
 
 .tab-bar button.active {
-  background: var(--accent);
-  color: #1a1a2e;
-  border-color: var(--accent);
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent) 60%, #b4842f);
+  color: #2a1a08;
+  border-color: #edc170;
+  font-weight: 700;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 0 10px rgba(214,164,82,0.35);
 }
 
-/* 水平子标签（面板内部小 Tab，如政策面板，保持横向） */
+/* 水平子标签（面板内部小 Tab，保持横向） */
 .tab-bar--inline {
   flex-direction: row;
   width: auto;
@@ -304,11 +437,46 @@ button:disabled {
   font-size: 0.85em;
 }
 
+/* ---------------- 头部（木质横幅） ---------------- */
+.header {
+  background:
+    linear-gradient(180deg, rgba(255, 232, 190, 0.08), rgba(0, 0, 0, 0.12)),
+    linear-gradient(180deg, #3a2b18, #22160b);
+  border-bottom: 2px solid var(--accent-dim);
+  padding: 14px;
+}
+
+.header h1 {
+  margin-bottom: 10px;
+  font-family: var(--font-title);
+  font-size: 1.6em;
+  letter-spacing: 1px;
+  color: var(--accent-hi);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.header-stats {
+  font-size: 0.9em;
+}
+
+/* 警示文字（沿用） */
+.warning { color: var(--accent); font-weight: 600; }
+.danger  { color: var(--red); font-weight: 700; }
+
+/* 滚动条（暖色调） */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--panel-dark); }
+::-webkit-scrollbar-thumb {
+  background: var(--accent-dim);
+  border-radius: 5px;
+  border: 2px solid var(--panel-dark);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
 @media (max-width: 400px) {
   #app { padding: 8px; }
   .panel { padding: 10px; }
   .resource-name { font-size: 0.88em; }
-  /* 窄屏回退：侧边栏变回顶部横栏 */
   .main-layout { flex-direction: column; }
   .tab-bar { flex-direction: row; width: 100%; }
   .tab-bar button { flex: 1; padding: 6px 4px; font-size: 0.7em; }
