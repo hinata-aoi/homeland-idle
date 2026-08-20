@@ -60,21 +60,21 @@ describe('initNewGame 初始状态', () => {
 })
 
 describe('getUpgradeCost 升级成本（经升级预览间接验证）', () => {
-  it('Lv1→2 仅主成本（farm 15 木材，无精炼二级成本）', () => {
+  it('Lv1→2 仅主成本（farm 30 木材，无精炼二级成本）', () => {
     store.initNewGame()
     store.openUpgradePreview('farm')
-    expect(store.upgradePreview.cost.primary).toEqual({ resource: 'wood', amount: 15 })
+    expect(store.upgradePreview.cost.primary).toEqual({ resource: 'wood', amount: 30 })
     expect(store.upgradePreview.cost.secondary).toBeNull()
   })
 
-  it('Lv5→6 引入精炼二级成本（生产建筑=木板）', () => {
+  it('Lv5 引入精炼二级成本（生产建筑=木板）', () => {
     store.initNewGame()
     store.buildingLevels.farm = 5
     store.openUpgradePreview('farm')
     const cost = store.upgradePreview.cost
-    expect(cost.primary).toEqual({ resource: 'wood', amount: 98 }) // floor(15×1.6^4)
+    expect(cost.primary).toEqual({ resource: 'wood', amount: 583 }) // floor(30×2.1^4)
     expect(cost.secondary.resource).toBe('plank')
-    expect(cost.secondary.amount).toBe(4) // floor(15×0.3×1.6^0)
+    expect(cost.secondary.amount).toBe(9) // floor(30×0.3×2.1^0)
   })
 
   it('加工建筑 Lv5+ 二级成本为石材，关键建筑无二级成本', () => {
@@ -107,7 +107,7 @@ describe('upgradeBuilding 升级与解锁', () => {
     store.setResourceAmount('wood', 500)
     expect(store.upgradeBuilding('farm')).toBe(true)
     expect(store.buildingLevels.farm).toBe(2)
-    expect(store.resources.wood).toBe(485)
+    expect(store.resources.wood).toBe(470) // 500 - 30（farm Lv1→2 = 30×2^0=30，成本按当前等级计）
   })
 
   it('资源不足时升级失败且等级不变', () => {
@@ -137,13 +137,15 @@ describe('upgradeBuilding 升级与解锁', () => {
     expect(store.buildingLevels.tannery).toBe(0)
   })
 
-  it('市政厅 Lv3 里程碑解锁狩猎场与制皮坊', () => {
+  it('市政厅 Lv3 里程碑解锁狩猎场、制皮坊、晾肉架与酿酒厂', () => {
     store.initNewGame()
     store.setResourceAmount('wood', 5000)
     store.buildingLevels.townhall = 2
     store.upgradeBuilding('townhall')
     expect(store.buildingLevels.hunting).toBe(1)
     expect(store.buildingLevels.tannery).toBe(1)
+    expect(store.buildingLevels.dryingRack).toBe(1)
+    expect(store.buildingLevels.brewery).toBe(1)
   })
 })
 
@@ -219,6 +221,56 @@ describe('配方切换', () => {
     // 水稻 1.5 × 等级倍率(1+(5−1)×0.5=3) × 幸福度 0.95 = 4.275
     expect(store.resources.rice).toBeCloseTo(4.275, 5)
     expect(store.resources.wheat).toBe(50) // 不再产小麦
+  })
+
+  it('晾肉架可切换配方（兽肉→肉干 与 鱼→肉干）', () => {
+    store.initNewGame()
+    store.buildingLevels.dryingRack = 1
+    expect(store.activeRecipes.dryingRack).toBe('meat') // 默认第一个配方
+    expect(store.setActiveRecipe('dryingRack', 'fish')).toBe(true)
+    expect(store.activeRecipes.dryingRack).toBe('fish')
+    // 输入摘要应从兽肉切换为鱼
+    const rack = store.unlockedProcessingBuildings.find(b => b.id === 'dryingRack')
+    expect(rack.inputSummary).toContain('鱼')
+    expect(rack.inputSummary).not.toContain('兽肉')
+  })
+
+  it('晾肉架切到鱼配方后实际加工消耗鱼并产出肉干（不消耗兽肉）', () => {
+    store.initNewGame()
+    store.buildingLevels.dryingRack = 1
+    store.setResourceAmount('meat', 100)
+    store.setResourceAmount('fish', 100)
+    store.setActiveRecipe('dryingRack', 'fish')
+    store.assignPop('dryingRack')
+    // 0.2375 批/s：5 次调用（1.1875）完成 1 批（2 鱼 → 1 肉干）
+    for (let i = 0; i < 5; i++) store.processBuildingPerSecond('dryingRack')
+    expect(store.resources.fish).toBeCloseTo(98, 5) // 消耗 2 鱼
+    expect(store.resources.meat).toBe(100)          // 兽肉未消耗
+    expect(store.refined.driedMeat).toBe(1)         // 产出 1 肉干
+    expect(store.processProgress.dryingRack).toBeCloseTo(0.1875, 5)
+  })
+
+  it('农田 Lv5 双配方：小麦与水稻均可切换且各自正确产出', () => {
+    store.initNewGame()
+    store.buildingLevels.farm = 5
+    expect(store.getAvailableRecipes('farm').map(r => r.id)).toEqual(['wheat', 'rice'])
+    store.assignPop('farm')
+    // 默认小麦：产出小麦，不产水稻
+    store.tick()
+    expect(store.resources.wheat).toBeGreaterThan(50)
+    expect(store.resources.rice).toBe(0)
+    // 切到水稻：产出水稻，小麦不再增长
+    store.setActiveRecipe('farm', 'rice')
+    const wheatBefore = store.resources.wheat
+    store.tick()
+    expect(store.resources.rice).toBeGreaterThan(0)
+    expect(store.resources.wheat).toBe(wheatBefore)
+    // 切回小麦：小麦恢复增长，水稻不再增长
+    store.setActiveRecipe('farm', 'wheat')
+    const riceBefore = store.resources.rice
+    store.tick()
+    expect(store.resources.wheat).toBeGreaterThan(wheatBefore)
+    expect(store.resources.rice).toBe(riceBefore)
   })
 })
 
@@ -426,7 +478,7 @@ describe('专精进化', () => {
   it('原建筑满级后进化成功：原建筑消失、进化建筑 Lv1、人口释放', () => {
     store.initNewGame()
     store.buildingLevels.farm = 5
-    store.setResourceAmount('wood', 500)
+    store.setResourceAmount('wood', 600)
     store.setResourceAmount('plank', 50)
     store.assignPop('farm')
     expect(store.evolveBuilding('farm', 'fertileFarm')).toBe(true)
@@ -438,7 +490,7 @@ describe('专精进化', () => {
 
   it('未满级 / 目标不匹配 / 分支被占用时拒绝进化', () => {
     store.initNewGame()
-    store.setResourceAmount('wood', 500)
+    store.setResourceAmount('wood', 600)
     expect(store.evolveBuilding('farm', 'fertileFarm')).toBe(false) // 未满级
 
     store.buildingLevels.farm = 5
@@ -453,7 +505,7 @@ describe('专精进化', () => {
   it('免费回退：进化建筑消失、原建筑回到 Lv1', () => {
     store.initNewGame()
     store.buildingLevels.farm = 5
-    store.setResourceAmount('wood', 500)
+    store.setResourceAmount('wood', 600)
     store.setResourceAmount('plank', 50)
     store.evolveBuilding('farm', 'fertileFarm')
     expect(store.revertBuilding('fertileFarm')).toBe(true)
@@ -503,7 +555,7 @@ describe('存档 save/load 与迁移', () => {
       warehouseLevel: 1,
       discoveredBuildings: ['farm', 'townhall'],
       totalPopulation: 4,
-      populationAssigned: { farm: 1, brewery: 2 }, // brewery 已删除的建筑
+      populationAssigned: { farm: 1, ghost: 2 }, // ghost 已删除的建筑
       foodValue: 50,
       policyRates: {},
       processProgress: {},
@@ -515,7 +567,7 @@ describe('存档 save/load 与迁移', () => {
     expect(store.resources.rice).toBe(0) // 补齐新资源默认值
     expect(store.buildingLevels.lake).toBe(1) // 补湖泊
     expect(store.discoveredBuildings).toContain('lake')
-    expect(store.populationAssigned.brewery).toBeUndefined() // 清理残留
+    expect(store.populationAssigned.ghost).toBeUndefined() // 清理残留
     expect(store.populationAssigned.farm).toBe(1)
     expect(store.activeRecipes.farm).toBe('wheat') // 回退默认配方
   })

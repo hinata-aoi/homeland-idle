@@ -65,7 +65,7 @@
       </div>
 
       <div style="margin-top:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
-        <span v-if="b.maxLevel && b.level >= b.maxLevel && !b.evolvedOnly" style="font-size:0.78em;color:var(--accent);">
+        <span v-if="b.maxLevel && b.level >= b.maxLevel && !b.evolvedOnly && b.canEvolve" style="font-size:0.78em;color:var(--accent);">
           已达 Lv{{ b.level }} — 可专精进化
         </span>
         <span v-else-if="b.maxLevel && b.level >= b.maxLevel" style="font-size:0.78em;color:var(--text-dim);">
@@ -78,9 +78,8 @@
           </template>
         </span>
         <!-- 原建筑 Lv5 满级：专精按钮（成本 = 原建筑 Lv5→Lv6） -->
-        <button v-if="b.maxLevel && b.level >= b.maxLevel && !b.evolvedOnly"
+        <button v-if="b.maxLevel && b.level >= b.maxLevel && !b.evolvedOnly && b.canEvolve"
           class="upgrade-btn evolve-btn"
-          :disabled="!canAfford(b.upgradeCost)"
           @click="store.openEvolutionChoice(b.id)">
           专精
         </button>
@@ -95,7 +94,6 @@
         <button v-else-if="b.maxLevel && b.level >= b.maxLevel"
           class="upgrade-btn" disabled style="background:#555;color:#999;">已满级</button>
         <button v-else class="upgrade-btn"
-          :disabled="!canAfford(b.upgradeCost)"
           @click="store.openUpgradePreview(b.id)">
           升级
         </button>
@@ -124,11 +122,5 @@ function resName(key) {
 // 配方是否已达解锁等级
 function recipeAvailable(b, r) {
   return b.level >= (r.unlockAt || 0)
-}
-
-function canAfford(cost) {
-  if (store.getResourceAmount(cost.primary.resource) < cost.primary.amount) return false
-  if (cost.secondary && store.getResourceAmount(cost.secondary.resource) < cost.secondary.amount) return false
-  return true
 }
 </script>

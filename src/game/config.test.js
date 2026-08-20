@@ -127,8 +127,18 @@ describe('BUILDINGS 结构完整性（保护性约束）', () => {
         }
       }
     }
-    // 加工建筑原料/产出（不走 recipes，直接读 input/inputs/output/outputs）
+    // 加工建筑原料/产出（含配方型加工建筑：b.recipes 里每条配方的 inputs/outputs）
     for (const b of PROCESSING_BUILDINGS) {
+      if (b.recipes) {
+        for (const r of b.recipes) {
+          for (const inp of (r.inputs || [])) {
+            expect(ALL_RESOURCES[inp.resource], `${b.id} 配方 ${r.id} 原料 ${inp.resource} 未定义`).toBeTruthy()
+          }
+          for (const out of (r.outputs || [])) {
+            expect(ALL_RESOURCES[out.resource], `${b.id} 配方 ${r.id} 产出 ${out.resource} 未定义`).toBeTruthy()
+          }
+        }
+      }
       for (const inp of (b.inputs || (b.input ? [b.input] : []))) {
         expect(ALL_RESOURCES[inp.resource], `${b.id} 原料 ${inp.resource} 未定义`).toBeTruthy()
       }
@@ -143,6 +153,18 @@ describe('BUILDINGS 结构完整性（保护性约束）', () => {
       if (!b.unlockBy) continue
       expect(getBuilding(b.unlockBy.building), `${b.id} unlockBy=${b.unlockBy.building} 不存在`).toBeTruthy()
     }
+  })
+
+  it('晾肉架双配方、酿酒厂单配方，均于市政厅 Lv3 解锁', () => {
+    const rack = getBuilding('dryingRack')
+    const brewery = getBuilding('brewery')
+    expect(rack.type).toBe('processing')
+    expect(getBuildingRecipes(rack).length).toBe(2)
+    expect(rack.unlockBy).toEqual({ building: 'townhall', level: 3 })
+    expect(brewery.type).toBe('processing')
+    expect(brewery.input.resource).toBe('treeFruit')
+    expect(brewery.output.resource).toBe('wine')
+    expect(brewery.unlockBy).toEqual({ building: 'townhall', level: 3 })
   })
 
   it('生产建筑类型分类互斥且完整', () => {

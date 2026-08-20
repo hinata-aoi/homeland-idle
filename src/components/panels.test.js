@@ -55,6 +55,22 @@ describe('ProductionPanel 生产面板', () => {
     expect(store.upgradePreviewId).toBe('farm')
   })
 
+  it('材料不足时仍可点开升级预览，但确认键禁用', async () => {
+    store.setResourceAmount('wood', 0) // farm Lv1→2 需 30 木材，现为 0
+    const w = mountWithPinia(ProductionPanel)
+    const upgradeBtn = w.findAll('button').find(b => b.text() === '升级')
+    expect(upgradeBtn.attributes('disabled')).toBeUndefined() // 按钮可点击
+    await upgradeBtn.trigger('click')
+    expect(store.upgradePreviewId).toBe('farm')
+    // 渲染弹窗，确认键应处于禁用态
+    const m = mount(UpgradeModal, { global: { plugins: [pinia] } })
+    const confirmBtn = [...document.body.querySelectorAll('button')]
+      .find(b => b.textContent === '确认升级')
+    expect(confirmBtn).toBeTruthy()
+    expect(confirmBtn.disabled).toBe(true)
+    m.unmount()
+  })
+
   it('驻人后显示产出速率（初始不开心状态 ×0.95）', () => {
     store.assignPop('farm')
     const w = mountWithPinia(ProductionPanel)

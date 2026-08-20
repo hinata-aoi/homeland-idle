@@ -48,7 +48,6 @@
           <button v-if="b.maxLevel && b.level >= b.maxLevel"
             class="upgrade-btn" disabled style="background:#555;color:#999;">已满级</button>
           <button v-else class="upgrade-btn"
-            :disabled="!canAfford(b.upgradeCost)"
             @click="store.openUpgradePreview(b.id)">
             升级
           </button>
@@ -73,11 +72,5 @@ const store = useGameStore()
 
 function resName(key) {
   return store.ALL_RESOURCES[key]?.name || key
-}
-
-function canAfford(cost) {
-  if (store.getResourceAmount(cost.primary.resource) < cost.primary.amount) return false
-  if (cost.secondary && store.getResourceAmount(cost.secondary.resource) < cost.secondary.amount) return false
-  return true
 }
 </script>

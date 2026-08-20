@@ -101,6 +101,10 @@ export const useGameStore = defineStore('game', () => {
       const recipes = getBuildingRecipes(b)
       if (recipes.length > 0) activeRecipes.value[b.id] = recipes[0].id
     }
+    // 配方型加工建筑（有 recipes，如晾肉架）同样默认第一个配方
+    for (const b of PROCESSING_BUILDINGS) {
+      if (b.recipes && b.recipes.length > 0) activeRecipes.value[b.id] = b.recipes[0].id
+    }
 
     foodValue.value = Math.floor(getGrowthNeeded(POPULATION_CONFIG.initialPopulation) / 2)
     policyRates.value = {}
@@ -343,6 +347,7 @@ export const useGameStore = defineStore('game', () => {
         const upgradeCost = getUpgradeCost(b, level)
         const nextMilestone = getNextMilestone(b, level)
         const availableRecipes = getAvailableRecipes(b.id)
+        const canEvolve = BUILDINGS.some(x => x.evolvedFrom === b.id)
         // 容量条显示主产出物
         const primaryResource = recipe?.outputs?.[0]?.resource || b.produces
         const cap = getResourceCap(primaryResource)
@@ -352,6 +357,7 @@ export const useGameStore = defineStore('game', () => {
           ...b, level, assigned, slots, rate, upgradeCost, nextMilestone,
           recipes, recipe, outputs: displayOutputs, availableRecipes,
           hasRecipeSwitch: availableRecipes.length > 1,
+          canEvolve,
           primaryResource,
           resourceAmount: amount, resourceCap: cap, resourcePct: pct,
           isManned: assigned > 0,
@@ -401,12 +407,16 @@ export const useGameStore = defineStore('game', () => {
         }))
         const outputsFull = outputsAmount.length > 0 && outputsAmount.every(o => o.amount >= o.cap)
         const outputSummary = effectiveOutputs.map(o => `${fmtClean(o.amount)}${getResName(o.resource)}`).join(' + ')
+        const recipeList = b.recipes ? getAvailableRecipes(b.id) : []
+        const activeRecipe = b.recipes ? getActiveRecipe(b.id) : null
+        const canEvolve = BUILDINGS.some(x => x.evolvedFrom === b.id)
         return {
           ...b, level, assigned, slots, upgradeCost, nextMilestone,
           effectiveInput: inputAmt,
           effectiveOutputs, outputSummary,
           inputs, inputsAmount, allInputsMet, inputSummary,
           outputsAmount, outputsFull,
+          recipes: recipeList, recipe: activeRecipe, hasRecipeSwitch: recipeList.length > 1, canEvolve,
           processRate: assigned > 0 ? assigned * (1 + (level - 1) * b.ratePerLevel) / b.processTime * happinessOutputMultiplier.value : 0,  // 批/s，1人=1倍速，每级+ratePerLevel，乘幸福度产出倍率
           progress,                                                  // 累积进度（秒）
           progressPct: Math.min(100, (progress % 1) * 100),          // 当前批次完成百分比
@@ -471,12 +481,22 @@ export const useGameStore = defineStore('game', () => {
   }
 
   // 获取建筑的原料列表（兼容旧单原料字段 input；新格式用 inputs 数组支持多原料）
+  // 配方型加工建筑（有 recipes）按当前活跃配方取 inputs
   function getInputs(building) {
+    if (building.recipes) {
+      const recipe = getActiveRecipe(building.id)
+      return (recipe && recipe.inputs) ? recipe.inputs : []
+    }
     return building.inputs || [building.input]
   }
 
   // 获取建筑的产出列表（兼容旧单产出字段 output；新格式用 outputs 数组支持多产出）
+  // 配方型加工建筑（有 recipes）按当前活跃配方取 outputs
   function getOutputs(building) {
+    if (building.recipes) {
+      const recipe = getActiveRecipe(building.id)
+      return (recipe && recipe.outputs) ? recipe.outputs : []
+    }
     return building.outputs || [building.output]
   }
 
@@ -1418,7 +1438,7 @@ export const useGameStore = defineStore('game', () => {
       }
       totalPopulation.value = data.totalPopulation ?? POPULATION_CONFIG.initialPopulation
       populationAssigned.value = data.populationAssigned || {}
-      // 迁移：清理已删除建筑（如早期版本的 brewery 酿酒坊）残留的派遣人口
+      // 迁移：清理已删除建筑（早期版本曾删除过某些建筑）残留的派遣人口
       // 否则该人口不可见地占用派遣名额，导致 空闲=0、所有 + 按钮失效
       const validBuildingIds = new Set(BUILDINGS.map(b => b.id))
       for (const id of Object.keys(populationAssigned.value)) {
@@ -1443,6 +1463,11 @@ export const useGameStore = defineStore('game', () => {
         const recipes = getBuildingRecipes(b)
         if (recipes.length > 0 && activeRecipes.value[b.id] === undefined) {
           activeRecipes.value[b.id] = recipes[0].id
+        }
+      }
+      for (const b of PROCESSING_BUILDINGS) {
+        if (b.recipes && b.recipes.length > 0 && activeRecipes.value[b.id] === undefined) {
+          activeRecipes.value[b.id] = b.recipes[0].id
         }
       }
       // 确保所有转化项都有默认值

@@ -26,6 +26,7 @@ export const REFINED_RESOURCES = {
   leather: { name: '皮革', icon: '👜', starting: 0, baseCapacity: 200 },
   bread:   { name: '面包', icon: '🍞', starting: 0, baseCapacity: 200 },
   wine:    { name: '酒',   icon: '🍷', starting: 0, baseCapacity: 150 },
+  driedMeat: { name: '肉干', icon: '🥓', starting: 0, baseCapacity: 200 },
   simpleMedicine: { name: '简易医药', icon: '🧪', starting: 0, baseCapacity: 150 },
   flour:   { name: '面粉', icon: '🥖', starting: 0, baseCapacity: 200 },
   resin:   { name: '树脂', icon: '🍯', starting: 0, baseCapacity: 200 },
@@ -88,6 +89,9 @@ export const UPGRADE_COST_CONFIG = {
 
 export const BUILDINGS = [
   // ========== 生产建筑 ==========
+  // 约定：基础生产建筑（专精前、非 evolvedOnly 的原料生产建筑）统一采用
+  //   baseCost = 30、costMultiplier = 2（Lv5 封顶后触发专精阈值二次成本）
+  // 新增基础生产建筑时遵循此数值；专精进化建筑（evolvedOnly: true）不改。
   {
     id: 'farm',
     type: 'production',
@@ -97,8 +101,8 @@ export const BUILDINGS = [
     produces: 'wheat',
     baseRate: 3,          // 1级 = 3 小麦/s
     ratePerLevel: 0.5,    // 每级 +1.5 小麦/s（3×0.5=1.5）
-    baseCost: 15,
-    costMultiplier: 1.5,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,          // Lv5 封顶 → 可专精进化（里程碑系统已重做）
     populationSlots: { base: 3, perLevel: 1 },
@@ -158,8 +162,8 @@ export const BUILDINGS = [
     produces: 'wood',
     baseRate: 0.8,
     ratePerLevel: 0.10,
-    baseCost: 10,
-    costMultiplier: 1.5,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,
     populationSlots: { base: 3, perLevel: 1 },
@@ -215,8 +219,8 @@ export const BUILDINGS = [
     produces: 'stone',
     baseRate: 0.5,
     ratePerLevel: 0.10,
-    baseCost: 20,
-    costMultiplier: 1.6,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,
     populationSlots: { base: 3, perLevel: 1 },
@@ -273,8 +277,8 @@ export const BUILDINGS = [
     produces: 'hide',
     baseRate: 0.3,
     ratePerLevel: 0.10,
-    baseCost: 25,
-    costMultiplier: 1.7,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,
     populationSlots: { base: 3, perLevel: 1 },
@@ -340,8 +344,8 @@ export const BUILDINGS = [
     produces: 'herb',
     baseRate: 0.2,          // 1级 = 0.2 草药/s
     ratePerLevel: 0.5,      // 每级 +0.1 草药/s（0.2×0.5）
-    baseCost: 18,
-    costMultiplier: 1.55,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,
     populationSlots: { base: 3, perLevel: 1 },
@@ -401,8 +405,8 @@ export const BUILDINGS = [
     produces: 'fish',
     baseRate: 1,          // 兼容占位（实际产出由 recipes 定义）
     ratePerLevel: 0.10,
-    baseCost: 12,
-    costMultiplier: 1.5,
+    baseCost: 30,
+    costMultiplier: 2,
     costResource: 'wood',
     maxLevel: 5,
     populationSlots: { base: 3, perLevel: 1 },
@@ -759,6 +763,48 @@ export const BUILDINGS = [
     populationSlots: { base: 3, perLevel: 1 },
   },
 
+  // 晾肉架：市政厅Lv3解锁，双配方（兽肉→肉干 / 鱼→肉干），Lv5封顶
+  {
+    id: 'dryingRack',
+    type: 'processing',
+    name: '晾肉架',
+    icon: '🥓',
+    description: '将兽肉或鱼风干为肉干',
+    recipes: [
+      { id: 'meat', name: '兽肉→肉干', inputs: [{ resource: 'meat', amount: 2 }], outputs: [{ resource: 'driedMeat', amount: 1 }] },
+      { id: 'fish', name: '鱼→肉干', inputs: [{ resource: 'fish', amount: 2 }], outputs: [{ resource: 'driedMeat', amount: 1 }] },
+    ],
+    processTime: 4,
+    baseCost: 100,
+    costMultiplier: 1.45,
+    costResource: 'stone',
+    ratePerLevel: 0.12,
+    unlockBy: { building: 'townhall', level: 3 },
+    levelUpBonus: 0.08,
+    maxLevel: 5,
+    populationSlots: { base: 3, perLevel: 1 },
+  },
+
+  // 酿酒厂：市政厅Lv3解锁，树果→酒，Lv5封顶
+  {
+    id: 'brewery',
+    type: 'processing',
+    name: '酿酒厂',
+    icon: '🍺',
+    description: '将树果酿造为酒',
+    input: { resource: 'treeFruit', amount: 3 },
+    output: { resource: 'wine', amount: 1 },
+    processTime: 5,
+    baseCost: 100,
+    costMultiplier: 1.45,
+    costResource: 'stone',
+    ratePerLevel: 0.12,
+    unlockBy: { building: 'townhall', level: 3 },
+    levelUpBonus: 0.08,
+    maxLevel: 5,
+    populationSlots: { base: 3, perLevel: 1 },
+  },
+
   // ========== 关键建筑 ==========
   {
     id: 'townhall',
@@ -772,7 +818,7 @@ export const BUILDINGS = [
     passiveFood: 2,  // 每秒被动产出食物值，防止最后人口被饿死
     milestones: {
       2: { desc: '解锁加工建筑 + 采石场 + 深山 + 诊所', unlockBuildings: ['sawmill', 'mason', 'mill', 'quarry', 'deepMountain', 'clinic'] },
-      3: { desc: '解锁狩猎场 + 制皮坊 + 公会', unlockBuildings: ['hunting', 'tannery', 'guild'] },
+      3: { desc: '解锁狩猎场 + 制皮坊 + 晾肉架 + 酿酒厂 + 公会', unlockBuildings: ['hunting', 'tannery', 'dryingRack', 'brewery', 'guild'] },
       4: { desc: '解锁税所 + 集市', unlockBuildings: ['taxOffice', 'market'] },
     }
   },
@@ -1129,7 +1175,7 @@ export const RESOURCE_VALUES = {
   wheat: 1, stone: 3, wood: 2, hide: 4, fish: 3,
   freshWater: 2, rice: 2, herb: 5, treeFruit: 3, milk: 4, meat: 5,
   // 精炼资源
-  plank: 8, brick: 10, leather: 12, bread: 10, wine: 15,
+  plank: 8, brick: 10, leather: 12, bread: 10, wine: 15, driedMeat: 8,
   simpleMedicine: 15, flour: 12, resin: 12, marble: 15, fur: 14,
   fiber: 10, bandage: 16,
 }
